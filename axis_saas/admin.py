@@ -2,6 +2,7 @@ from django.contrib import admin
 from django_tenants.admin import TenantAdminMixin
 from django import forms
 from django.utils.safestring import mark_safe
+from django.core.exceptions import ValidationError
 from .models import SchoolClient
 
 
@@ -22,6 +23,11 @@ class PublicOnlyAdminMixin:
         return request.tenant.schema_name == 'public'
     def has_view_permission(self, request, obj=None):
         return request.tenant.schema_name == 'public'
+
+    def get_queryset(self, request):
+        # Explicitly filters out the 'public' master tenant row from the display matrix
+        qs = super().get_queryset(request)
+        return qs.exclude(schema_name='public')
     def has_add_permission(self, request):
         return request.tenant.schema_name == 'public'
     def has_change_permission(self, request, obj=None):
@@ -37,12 +43,16 @@ class SchoolClientForm(forms.ModelForm):
             'admin_password': forms.PasswordInput(render_value=True),
         }
 
+    def clean_schema_name(self):
+        schema = self.cleaned_data.get('schema_name')
+        if self.instance.pk and self.instance.schema_name == 'public' and schema != 'public':
+            raise ValidationError("CRITICAL ERROR: The core public operational schema token cannot be renamed.")
+        return schema
+
 @admin.register(SchoolClient)
 class SchoolClientAdmin(TenantAdminMixin, admin.ModelAdmin):
     form = SchoolClientForm
     list_display = ('name', 'schema_name', 'admin_username', 'is_active', 'created_on', 'get_admin_url_link')
-    
-    # Readonly field jo sirf school save hone ke baad admin panel ka dynamic link generate karegi
     readonly_fields = ('school_admin_portal_url',)
     
     fieldsets = (
@@ -58,9 +68,20 @@ class SchoolClientAdmin(TenantAdminMixin, admin.ModelAdmin):
         }),
     )
 
+    def get_readonly_fields(self, request, obj=None):
+        # If modifying the absolute root 'public' schema, lock the fields down to prevent human errors
+        if obj and obj.schema_name == 'public':
+            return self.readonly_fields + ('schema_name', 'admin_username', 'is_active')
+        return self.readonly_fields
+
+    def has_delete_permission(self, request, obj=None):
+        # ABSOLUTE KILL SWITCH BLOCK: Completely bars the system from ever deleting the public master node via GUI
+        if obj and obj.schema_name == 'public':
+            return False
+        return request.tenant.schema_name == 'public'
+
     def school_admin_portal_url(self, obj):
         if obj.pk and obj.schema_name != 'public':
-            # Dynamic secure URL generation with port 8000 for local development
             target_url = f"http://{obj.schema_name}.localhost:8000/admin/"
             return mark_safe(f'<a href="{target_url}" target="_blank" style="background: #10b981; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">🚀 Open {obj.name} Admin Panel</a>')
         return "Link will be generated automatically after you click Save below."
@@ -71,7 +92,7 @@ class SchoolClientAdmin(TenantAdminMixin, admin.ModelAdmin):
         if obj.schema_name != 'public':
             target_url = f"http://{obj.schema_name}.localhost:8000/admin/"
             return mark_safe(f'<a href="{target_url}" target="_blank" style="color: #38bdf8; font-weight: bold;">Open Portal</a>')
-        return "-"
+        return "MASTER NODE"
     get_admin_url_link.short_description = "Quick Portal Link"
 
     def has_module_permission(self, request):
@@ -80,10 +101,14 @@ class SchoolClientAdmin(TenantAdminMixin, admin.ModelAdmin):
     def has_view_permission(self, request, obj=None):
         return request.tenant.schema_name == 'public'
 
+    def get_queryset(self, request):
+        # Explicitly filters out the 'public' master tenant row from the display matrix
+        qs = super().get_queryset(request)
+        return qs.exclude(schema_name='public')
+
 
 # --- AXIS Student Registry Injection ---
 from .models import Student
-from .admin import TenantOnlyAdminMixin
 
 @admin.register(Student)
 class StudentAdmin(TenantOnlyAdminMixin, admin.ModelAdmin):
@@ -109,7 +134,7 @@ class StudentAdmin(TenantOnlyAdminMixin, admin.ModelAdmin):
     )
     
     def get_readonly_fields(self, request, obj=None):
-        if obj: # Roll number shouldn't be edited manually once set
+        if obj:
             return self.readonly_fields + ('roll_number',)
         return self.readonly_fields
 
