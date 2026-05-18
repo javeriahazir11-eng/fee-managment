@@ -3,7 +3,7 @@ from django.db import models
 from django_tenants.models import TenantMixin, DomainMixin
 
 class SchoolClient(TenantMixin):
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=100, unique=True)
     created_on = models.DateField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
     

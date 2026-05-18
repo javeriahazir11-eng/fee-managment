@@ -44,9 +44,18 @@ class SchoolClientForm(forms.ModelForm):
         }
 
     def clean_schema_name(self):
-        schema = self.cleaned_data.get('schema_name')
+        schema = self.cleaned_data.get('schema_name').lower().strip()
         if self.instance.pk and self.instance.schema_name == 'public' and schema != 'public':
             raise ValidationError("CRITICAL ERROR: The core public operational schema token cannot be renamed.")
+        
+        # Check if schema already exists in DB to prevent orphan schema takeovers
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT schema_name FROM information_schema.schemata WHERE schema_name = %s", [schema])
+            exists = cursor.fetchone()
+        
+        if not self.instance.pk and exists:
+            raise ValidationError(f"⚠️ SECURITY BREACH BLOCK: The schema name '{schema}' physically exists in PostgreSQL as an active partition! Choose a unique routing path.")
         return schema
 
 @admin.register(SchoolClient)
