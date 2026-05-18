@@ -154,3 +154,57 @@ from .models import FeeStructure
 class FeeStructureAdmin(TenantOnlyAdminMixin, admin.ModelAdmin):
     list_display = ('grade', 'monthly_fee', 'updated_at')
     search_fields = ('grade',)
+
+# --- AXIS SECURITY HARDENING: MULTI-TENANT ISOLATION OVERRIDE ---
+from django.contrib.auth.models import User, Group
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
+
+# Completely unregister default configurations from the shared fallback registry
+try:
+    admin.site.unregister(User)
+    admin.site.unregister(Group)
+except admin.sites.NotRegistered:
+    pass
+
+@admin.register(User)
+class TenantSecuredUserAdmin(BaseUserAdmin):
+    def has_module_permission(self, request):
+        # Master global admin retains full visual scope. Tenant nodes see nothing.
+        return request.tenant.schema_name == 'public'
+
+    def has_view_permission(self, request, obj=None):
+        return request.tenant.schema_name == 'public'
+
+    def has_add_permission(self, request):
+        return request.tenant.schema_name == 'public'
+
+    def has_change_permission(self, request, obj=None):
+        return request.tenant.schema_name == 'public'
+
+    def has_delete_permission(self, request, obj=None):
+        return request.tenant.schema_name == 'public'
+
+    def save_model(self, request, obj, form, change):
+        # Strict dynamic execution block: No school admin can ever escalate an account to superuser boundaries
+        if request.tenant.schema_name != 'public':
+            obj.is_superuser = False
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(Group)
+class TenantSecuredGroupAdmin(BaseGroupAdmin):
+    def has_module_permission(self, request):
+        return request.tenant.schema_name == 'public'
+
+    def has_view_permission(self, request, obj=None):
+        return request.tenant.schema_name == 'public'
+
+    def has_add_permission(self, request):
+        return request.tenant.schema_name == 'public'
+
+    def has_change_permission(self, request, obj=None):
+        return request.tenant.schema_name == 'public'
+
+    def has_delete_permission(self, request, obj=None):
+        return request.tenant.schema_name == 'public'
