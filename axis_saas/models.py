@@ -62,6 +62,8 @@ class Student(models.Model):
     notes = models.TextField(blank=True, null=True, verbose_name="Notes (Optional)")
     
     roll_number = models.CharField(max_length=50, default="TEMP_TOKEN", verbose_name="Roll Number Token")
+    custom_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Assigned Fee (RS)")
+    
     enrolled_on = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
@@ -93,7 +95,28 @@ class Student(models.Model):
             else:
                 # Agar school ka pehla bacha hai, toh sequence 1001 se start hoga
                 self.roll_number = "1001"
+        
+        # Pull base class fee configuration automatically if configured
+        if not self.pk or self.custom_fee == 0.00:
+            base_fee = FeeStructure.objects.filter(grade=self.grade).first()
+            if base_fee:
+                self.custom_fee = base_fee.monthly_fee
         super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.name} - Reg: {self.roll_number} ({self.grade}-{self.section})"
+
+
+class FeeStructure(models.Model):
+    grade = models.CharField(max_length=50, unique=True, verbose_name="Class / Grade")
+    monthly_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Monthly Fee (RS)")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Class {self.grade} - RS {self.monthly_fee}"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Automatic Dynamic Cascade Update Matrix
+        # Jab bhi admin is class ki fee set ya change karega, is class ke saare students ki automatic update ho jayegi
+        Student.objects.filter(grade=self.grade).update(custom_fee=self.monthly_fee)

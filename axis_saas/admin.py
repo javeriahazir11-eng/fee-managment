@@ -112,3 +112,11 @@ class StudentAdmin(TenantOnlyAdminMixin, admin.ModelAdmin):
         if obj: # Roll number shouldn't be edited manually once set
             return self.readonly_fields + ('roll_number',)
         return self.readonly_fields
+
+# --- AXIS Fee Structure Registry Injection ---
+from .models import FeeStructure
+
+@admin.register(FeeStructure)
+class FeeStructureAdmin(TenantOnlyAdminMixin, admin.ModelAdmin):
+    list_display = ('grade', 'monthly_fee', 'updated_at')
+    search_fields = ('grade',)

@@ -46,3 +46,41 @@ def add_student_instance(request):
         form = StudentAdmissionForm()
         
     return render(request, 'tenant/student_form.html', {'form': form})
+
+from .models import FeeStructure
+
+class FeeSetupForm(forms.ModelForm):
+    class Meta:
+        model = FeeStructure
+        fields = ['grade', 'monthly_fee']
+
+@login_required
+def fee_management_dashboard(request):
+    if request.tenant.schema_name == 'public':
+        return redirect('/admin/')
+    
+    fee_structures = FeeStructure.objects.all().order_by('grade')
+    
+    if request.method == 'POST':
+        form = FeeSetupForm(request.POST)
+        if form.is_valid():
+            grade_target = form.cleaned_data['grade']
+            fee_amount = form.cleaned_data['monthly_fee']
+            
+            # Upsert operations
+            fee_obj, created = FeeStructure.objects.update_or_create(
+                grade=grade_target,
+                defaults={'monthly_fee': fee_amount}
+            )
+            # Cascade safe runtime trigger manually for existing set
+            Student.objects.filter(grade=grade_target).update(custom_fee=fee_amount)
+            
+            messages.success(request, f"Fee successfully updated for Class {grade_target} to RS {fee_amount}.")
+            return redirect('fee_dashboard')
+    else:
+        form = FeeSetupForm()
+        
+    return render(request, 'tenant/fee_dashboard.html', {
+        'fee_structures': fee_structures,
+        'form': form
+    })

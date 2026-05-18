@@ -30,6 +30,7 @@
 
         <div class="action-bar">
             <a href="{% url 'add_student' %}" class="btn">➕ Add New Student Instance</a>
+            <a href="{% url 'fee_dashboard' %}" class="btn" style="background: #4cc9f0;">💰 Configure School Fee System</a>
             <a href="/admin/" class="btn btn-alt" target="_blank">Django Admin Backend Terminal</a>
             <a href="{% url 'school_logout' %}" class="logout-link">Secure Exit (Logout)</a>
         </div>
@@ -42,6 +43,7 @@
                     <th>Full Legal Name</th>
                     <th>Assigned Grade Class</th>
                     <th>Date Inducted</th>
+                    <th>Assigned Monthly Fee</th>
                 </tr>
             </thead>
             <tbody>
@@ -51,10 +53,11 @@
                     <td><strong>{{ student.name }}</strong></td>
                     <td>Class {{ student.grade }}</td>
                     <td>{{ student.enrolled_on|date:"Y-m-d" }}</td>
+                    <td style="color: #6fffe9; font-weight: bold;">RS {{ student.custom_fee }}</td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="4" style="text-align: center; color: #8da2bb; padding: 30px;">No students mapped to this node yet. Use the registration wizard to create profiles.</td>
+                    <td colspan="5" style="text-align: center; color: #8da2bb; padding: 30px;">No students mapped to this node yet. Use the registration wizard to create profiles.</td>
                 </tr>
                 {% endfor %}
             </tbody>
