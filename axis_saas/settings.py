@@ -64,6 +64,10 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+LOGIN_URL = 'tenant_login'
+LOGIN_REDIRECT_URL = 'school_home'
+LOGOUT_REDIRECT_URL = 'tenant_login'
+
 # ==============================================================================
 # MULTI-TENANT CONFIGURATION MATRIX
 # ==============================================================================
