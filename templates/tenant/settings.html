@@ -1,0 +1,71 @@
+{% extends 'tenant/base.html' %}
+
+{% block title %}{{ tenant.name }} | Settings{% endblock %}
+
+{% block body %}
+<div class="app-shell">
+    <aside class="sidebar">
+        <div style="display: flex; gap: 14px; align-items: center;">
+            <div class="brand-logo">{{ tenant.name|slice:":2"|upper }}</div>
+            <div>
+                <p class="brand-title">{{ tenant.name }}</p>
+                <p class="brand-meta">Settings</p>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <a href="{% url 'school_portal' schema_name=tenant.schema_name %}">Dashboard</a>
+            <a href="{% url 'school_portal_settings' schema_name=tenant.schema_name %}" class="active">Settings</a>
+        </nav>
+
+        <div class="sidebar-meta">
+            <button id="themeButton" class="theme-toggle" type="button">Toggle theme</button>
+            <a href="{% url 'school_portal_logout' schema_name=tenant.schema_name %}" class="theme-toggle secondary">Logout</a>
+        </div>
+    </aside>
+
+    <main class="page-body">
+        <div class="page-card">
+            <div class="page-head">
+                <div>
+                    <h1 class="page-title">Portal settings</h1>
+                    <p class="page-description">Update your school login credentials and upload a custom logo that appears in the portal sidebar.</p>
+                </div>
+            </div>
+
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="message-success">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+
+            <div class="form-card">
+                <h3>Portal account and branding</h3>
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <div class="field-card">
+                        <label for="id_admin_username">Username</label>
+                        {{ form.admin_username }}
+                    </div>
+                    <div class="field-card">
+                        <label for="id_admin_password">Password</label>
+                        {{ form.admin_password }}
+                    </div>
+                    <div class="field-card">
+                        <label for="id_school_logo">School logo</label>
+                        {{ form.school_logo }}
+                        {% if logo_url %}
+                            <img src="{{ logo_url }}" alt="School logo" class="logo-preview" style="margin-top: 18px;">
+                        {% endif %}
+                    </div>
+                    <div class="field-card">
+                        <button type="submit">Save Settings</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="form-note">Your school portal logo and credentials are stored for this tenant only, not shared with other tenant nodes.</div>
+        </div>
+    </main>
+</div>
+{% endblock %}

@@ -1,60 +1,61 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>{{ tenant.name }} | School Admin</title>
-    <style>
-        body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; }
-        .layout { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
-        .sidebar { background: #111827; padding: 32px 24px; display: flex; flex-direction: column; gap: 28px; }
-        .brand { color: #38bdf8; font-size: 1.5rem; font-weight: 700; }
-        .school-name { color: #93c5fd; font-size: 0.95rem; margin-top: 8px; }
-        .menu { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
-        .menu-item a { display: block; color: #cbd5e1; text-decoration: none; padding: 12px 14px; border-radius: 10px; transition: background .15s ease; }
-        .menu-item a.active, .menu-item a:hover { background: #1f2937; color: #f8fafc; }
-        .logout { margin-top: auto; }
-        .logout a { display: inline-block; color: #f87171; text-decoration: none; font-weight: 700; }
-        .content { padding: 32px 40px; background: #0f172a; }
-        .card { background: #111827; border: 1px solid #1f2937; border-radius: 18px; padding: 28px; max-width: 1040px; }
-        .headline { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }
-        .headline h1 { margin: 0; color: #38bdf8; font-size: 2rem; }
-        .subtext { color: #94a3b8; margin-top: 8px; }
-        .footer-note { margin-top: 26px; color: #94a3b8; }
-        .summary { margin-top: 28px; border: 1px solid #1f2937; border-radius: 16px; padding: 24px; background: #0f172a; }
-        .summary h2 { margin: 0 0 12px; color: #ffffff; font-size: 1.2rem; }
-        .summary p { margin: 0; color: #cbd5e1; line-height: 1.7; }
-    </style>
-</head>
-<body>
-    <div class="layout">
-        <aside class="sidebar">
+{% extends 'tenant/base.html' %}
+
+{% block title %}{{ tenant.name }} | Dashboard{% endblock %}
+
+{% block body %}
+<div class="app-shell">
+    <aside class="sidebar">
+        <div style="display: flex; gap: 14px; align-items: center;">
+            <div class="brand-logo">{{ tenant.name|slice:":2"|upper }}</div>
             <div>
-                <div class="brand">School Admin</div>
-                <div class="school-name">{{ tenant.name }}</div>
+                <p class="brand-title">{{ tenant.name }}</p>
+                <p class="brand-meta">{{ tenant.schema_name }} · School Portal</p>
             </div>
-            <ul class="menu">
-                <li class="menu-item"><a href="{% url 'school_portal' schema_name=tenant.schema_name %}" class="active">Dashboard</a></li>
-            </ul>
-            <div class="logout"><a href="{% url 'school_portal_logout' schema_name=tenant.schema_name %}">Logout</a></div>
-        </aside>
-        <main class="content">
-            <div class="card">
-                <div class="headline">
-                    <div>
-                        <h1>Welcome to {{ tenant.name }}</h1>
-                        <p class="subtext">This is your custom school admin portal. Only your school tenant sees this page.</p>
-                    </div>
-                    <span style="color: #94a3b8; font-size: 0.95rem;">Portal path: /portal/{{ tenant.schema_name }}/</span>
-                </div>
+        </div>
 
-                <div class="summary">
-                    <h2>Portal status</h2>
-                    <p>The school portal is live and secured with the credentials set by the super admin.</p>
-                </div>
+        <nav class="sidebar-nav">
+            <a href="{% url 'school_portal' schema_name=tenant.schema_name %}" class="active">Dashboard</a>
+            <a href="{% url 'school_portal_settings' schema_name=tenant.schema_name %}">Settings</a>
+        </nav>
 
-                <p class="footer-note">Your school admin panel is custom-built for your tenant. The shared Django admin is reserved for the super admin only.</p>
+        <div class="sidebar-meta">
+            <button id="themeButton" class="theme-toggle" type="button">Toggle theme</button>
+            <a href="{% url 'school_portal_logout' schema_name=tenant.schema_name %}" class="theme-toggle secondary">Logout</a>
+        </div>
+    </aside>
+
+    <main class="page-body">
+        <div class="page-card">
+            <div class="page-head">
+                <div>
+                    <h1 class="page-title">Welcome back, {{ tenant.name }}</h1>
+                    <p class="page-description">This is your custom school admin dashboard. Use the settings page to update your portal credentials and logo.</p>
+                </div>
+                {% if logo_url %}
+                    <img src="{{ logo_url }}" alt="School logo" class="logo-preview">
+                {% endif %}
             </div>
-        </main>
-    </div>
-</body>
-</html>
+
+            <div class="grid-3">
+                <div class="stat-card">
+                    <span class="stat-label">School</span>
+                    <p class="stat-value">{{ tenant.name }}</p>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">Tenant code</span>
+                    <p class="stat-value">{{ tenant.schema_name }}</p>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">Portal mode</span>
+                    <p class="stat-value">Light / Dark</p>
+                </div>
+            </div>
+
+            <div class="form-card">
+                <h3>Portal security</h3>
+                <p class="form-note">The school portal is isolated. Super admin remains on the shared Django admin interface. Your credentials are subject to the enterprise school settings only.</p>
+            </div>
+        </div>
+    </main>
+</div>
+{% endblock %}

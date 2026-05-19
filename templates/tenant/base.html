@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';">
+    <title>{% block title %}School Portal{% endblock %}</title>
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --surface-alt: #f1f5f9;
+            --text: #0f172a;
+            --muted: #5b7289;
+            --primary: #0f766e;
+            --primary-strong: #115e59;
+            --danger: #b91c1c;
+            --border: rgba(15, 23, 42, 0.08);
+            --shadow: 0 24px 80px rgba(15, 23, 42, 0.06);
+        }
+        [data-theme="dark"] {
+            --bg: #0f172a;
+            --surface: #111827;
+            --surface-alt: #1f2937;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --primary: #34d399;
+            --primary-strong: #10b981;
+            --danger: #fca5a5;
+            --border: rgba(148, 163, 184, 0.18);
+            --shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            color: var(--text);
+            background: var(--bg);
+        }
+        a { color: inherit; text-decoration: none; }
+        button, input, select, textarea { font: inherit; }
+        .app-shell { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
+        .sidebar {
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            padding: 32px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
+        }
+        .brand-logo { width: 56px; height: 56px; border-radius: 18px; display: grid; place-items: center; background: var(--primary-strong); color: white; font-weight: 800; }
+        .brand-title { margin: 0; font-size: 1.35rem; letter-spacing: -0.03em; }
+        .brand-meta { color: var(--muted); font-size: 0.95rem; line-height: 1.6; }
+        .sidebar-nav { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+        .sidebar-nav a { display: block; padding: 14px 16px; border-radius: 14px; background: var(--surface-alt); color: var(--text); border: 1px solid transparent; transition: all .2s ease; }
+        .sidebar-nav a.active, .sidebar-nav a:hover { background: var(--primary); color: #ffffff; border-color: transparent; }
+        .sidebar-meta { margin-top: auto; display: grid; gap: 12px; }
+        .theme-toggle { width: 100%; padding: 12px 16px; border-radius: 14px; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; text-align: left; }
+        .page-body { padding: 32px 40px; background: var(--bg); }
+        .page-card { background: var(--surface); border: 1px solid var(--border); border-radius: 24px; box-shadow: var(--shadow); padding: 32px; }
+        .page-head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+        .page-title { margin: 0; font-size: clamp(2rem, 2.5vw, 2.4rem); }
+        .page-description { margin: 12px 0 0 0; color: var(--muted); max-width: 780px; }
+        .grid-3 { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin-top: 28px; }
+        .stat-card { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 20px; padding: 24px; }
+        .stat-label { color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-size: .8rem; }
+        .stat-value { margin: 12px 0 0 0; font-size: 2.05rem; font-weight: 700; color: var(--primary-strong); }
+        .field-card { display: grid; gap: 18px; margin-top: 24px; }
+        .field-card label { display: block; font-size: .95rem; margin-bottom: 8px; color: var(--muted); }
+        .field-card input, .field-card button, .field-card textarea { width: 100%; border-radius: 16px; border: 1px solid var(--border); padding: 14px 16px; background: var(--surface); color: var(--text); }
+        .field-card button { border: none; background: var(--primary); color: #fff; cursor: pointer; font-weight: 700; }
+        .field-card .secondary { background: var(--surface-alt); color: var(--text); }
+        .form-columns { display: grid; gap: 20px; grid-template-columns: 1.4fr 1fr; margin-top: 28px; }
+        .form-card { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 24px; padding: 28px; }
+        .form-card h3 { margin-top: 0; }
+        .form-note { color: var(--muted); font-size: .95rem; margin-top: 12px; }
+        .logo-preview { width: 100%; max-width: 220px; height: auto; border-radius: 18px; border: 1px solid var(--border); background: var(--surface-alt); padding: 10px; }
+        .message-success { padding: 18px 22px; border-radius: 18px; background: #dcfce7; color: #166534; border: 1px solid #86efac; margin-bottom: 20px; }
+        .message-error { padding: 18px 22px; border-radius: 18px; background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; margin-bottom: 20px; }
+        @media (max-width: 900px) {
+            .app-shell { grid-template-columns: 1fr; }
+            .sidebar { flex-direction: row; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+            .sidebar-meta { width: 100%; }
+            .page-body { padding: 24px; }
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    {% block body %}{% endblock %}
+    <script>
+        const root = document.documentElement;
+        const currentTheme = localStorage.getItem('schoolPortalTheme');
+        if (currentTheme) root.setAttribute('data-theme', currentTheme);
+
+        function toggleTheme() {
+            const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+            root.setAttribute('data-theme', next);
+            localStorage.setItem('schoolPortalTheme', next);
+            document.getElementById('themeButton').textContent = next === 'dark' ? 'Switch to Light' : 'Switch to Dark';
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const button = document.getElementById('themeButton');
+            if (button) {
+                const theme = root.getAttribute('data-theme');
+                button.textContent = theme === 'dark' ? 'Switch to Light' : 'Switch to Dark';
+                button.addEventListener('click', toggleTheme);
+            }
+        });
+    </script>
+</body>
+</html>

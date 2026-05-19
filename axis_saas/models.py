@@ -9,6 +9,7 @@ class SchoolClient(TenantMixin):
     
     admin_username = models.CharField(max_length=150, default="admin_pending", help_text="Custom Superuser login username for this school instance")
     admin_password = models.CharField(max_length=128, default="AxisFallback123!", help_text="Custom Superuser login password")
+    school_logo = models.FileField(upload_to="school_logos/", blank=True, null=True, help_text="Upload a school emblem or logo for the portal sidebar.")
 
     auto_create_schema = True
 

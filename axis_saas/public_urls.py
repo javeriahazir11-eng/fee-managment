@@ -1,7 +1,10 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.urls import path
 from django.http import HttpResponse, HttpResponseNotFound
 from django.shortcuts import redirect, render
+from django.conf import settings
+from django.conf.urls.static import static
+from django import forms
 
 from axis_saas.models import SchoolClient
 
@@ -61,6 +64,32 @@ def school_logout(request, schema_name):
     return redirect('/')
 
 
+class SchoolPortalSettingsForm(forms.ModelForm):
+    admin_password = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=False),
+        help_text='Leave blank to keep existing password.'
+    )
+
+    class Meta:
+        model = SchoolClient
+        fields = ['admin_username', 'admin_password', 'school_logo']
+        widgets = {'admin_password': forms.PasswordInput(render_value=False)}
+
+    def clean_admin_username(self):
+        username = self.cleaned_data['admin_username'].strip()
+        if len(username) < 4:
+            raise forms.ValidationError('Username must be at least 4 characters long.')
+        return username
+
+    def clean(self):
+        cleaned_data = super().clean()
+        password = cleaned_data.get('admin_password')
+        if password and len(password) < 8:
+            self.add_error('admin_password', 'Password must be at least 8 characters.')
+        return cleaned_data
+
+
 def school_dashboard(request, schema_name):
     tenant = get_school_tenant(schema_name)
     if not tenant:
@@ -69,8 +98,37 @@ def school_dashboard(request, schema_name):
     if request.session.get('school_admin_authenticated') is not True or request.session.get('school_admin_schema') != tenant.schema_name:
         return redirect(f'/portal/{tenant.schema_name}/login/')
 
+    logo_url = tenant.school_logo.url if tenant.school_logo else None
     return render(request, 'tenant/dashboard.html', {
         'tenant': tenant,
+        'logo_url': logo_url,
+    })
+
+
+def school_settings(request, schema_name):
+    tenant = get_school_tenant(schema_name)
+    if not tenant:
+        return HttpResponseNotFound('School portal not found.')
+
+    if request.session.get('school_admin_authenticated') is not True or request.session.get('school_admin_schema') != tenant.schema_name:
+        return redirect(f'/portal/{tenant.schema_name}/login/')
+
+    if request.method == 'POST':
+        form = SchoolPortalSettingsForm(request.POST, request.FILES, instance=tenant)
+        if form.is_valid():
+            if not form.cleaned_data.get('admin_password'):
+                form.instance.admin_password = tenant.admin_password
+            form.save()
+            messages.success(request, 'Settings updated successfully.')
+            return redirect('school_portal_settings', schema_name=tenant.schema_name)
+    else:
+        form = SchoolPortalSettingsForm(instance=tenant)
+
+    logo_url = tenant.school_logo.url if tenant.school_logo else None
+    return render(request, 'tenant/settings.html', {
+        'tenant': tenant,
+        'form': form,
+        'logo_url': logo_url,
     })
 
 urlpatterns = [
@@ -79,4 +137,8 @@ urlpatterns = [
     path('portal/<slug:schema_name>/', school_dashboard, name='school_portal'),
     path('portal/<slug:schema_name>/login/', school_login, name='school_portal_login'),
     path('portal/<slug:schema_name>/logout/', school_logout, name='school_portal_logout'),
+    path('portal/<slug:schema_name>/settings/', school_settings, name='school_portal_settings'),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
