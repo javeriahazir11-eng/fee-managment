@@ -1,0 +1,20 @@
+{% extends 'tenant/base.html' %}
+{% block title %}Fee Collection{% endblock %}
+{% block body %}
+<h1>Fee Collection</h1>
+<div class="card" style="margin-top: 20px;">
+    <form method="post">
+        {% csrf_token %}
+        <div class="form-group"><label>Student</label>{{ form.student }}</div>
+        <div class="form-group"><label>Amount (₹)</label>{{ form.amount }}</div>
+        <div class="form-group"><label>Payment Mode</label>{{ form.payment_mode }}</div>
+        <div class="form-group"><label>Remarks</label>{{ form.remarks }}</div>
+        <button type="submit" class="btn-primary">Process Payment</button>
+    </form>
+</div>
+{% if selected_student %}
+<div class="card"><h3>Pending fees for {{ selected_student.name }}</h3><table class="table"><tr><th>Month/Year</th><th>Amount</th><th>Paid</th><th>Remaining</th></tr>{% for r in pending_records %}<tr><td>{{ r.month }}/{{ r.year }}</td><td>₹{{ r.amount }}</td><td>₹{{ r.paid_amount }}</td><td>₹{{ r.remaining }}</td></tr>{% endfor %}<tr><td colspan="3"><strong>Total Pending</strong></td><td><strong>₹{{ total_pending }}</strong></td></tr></table></div>
+{% endif %}
+<style>.form-group { margin-bottom: 16px; } .form-group label { display: block; margin-bottom: 6px; font-weight: 500; } input, select, textarea { width: 100%; padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-alt); }</style>
+<script>document.querySelector('select[name="student"]').addEventListener('change', function(){ if(this.value) window.location.href = "{% url 'fee_collection' schema_name=tenant.schema_name %}?student_id="+this.value; });</script>
+{% endblock %}

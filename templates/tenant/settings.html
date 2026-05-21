@@ -1,62 +1,6 @@
 {% extends 'tenant/base.html' %}
-
-{% block title %}{{ tenant.name }} | Settings{% endblock %}
-
-{% block sidebar_meta %}Settings Node{% endblock %}
-{% block nav_settings_active %}active{% endblock %}
-
+{% block title %}Settings{% endblock %}
 {% block body %}
-<div class="page-card">
-    <div class="page-head">
-        <div>
-            <h1 class="page-title">Portal settings</h1>
-            <p class="page-description">Update account login keys or manage configuration assets metadata.</p>
-        </div>
-    </div>
-
-    {% if messages %}
-        {% for message in messages %}
-            <div class="message-success">{{ message }}</div>
-        {% endfor %}
-    {% endif %}
-
-    <div class="form-card">
-        <h3>Portal account and branding</h3>
-        <form method="post" enctype="multipart/form-data">
-            {% csrf_token %}
-            <div class="field-card">
-                <label for="id_admin_username">Username</label>
-                {{ form.admin_username }}
-            </div>
-            <div class="field-card">
-                <label for="id_admin_password">Password</label>
-                {{ form.admin_password }}
-            </div>
-            <div class="field-card">
-                <label for="id_school_logo">School logo</label>
-                {{ form.school_logo }}
-                {% if logo_url %}
-                    <div style="margin-top: 12px;">
-                        <img src="{{ logo_url }}" alt="School logo" class="logo-preview">
-                    </div>
-                {% endif %}
-            </div>
-            <div class="field-card" style="margin-top: 20px;">
-                <button type="submit">Save Settings</button>
-            </div>
-        </form>
-        
-        <div style="margin-top: 24px; border-top: 1px solid var(--border); padding-top: 16px;">
-            <span style="font-size: 0.88rem; display: block; color: var(--muted); font-weight: 500;">Exit current session securely:</span>
-            <a href="{% url 'school_portal_logout' schema_name=tenant.schema_name %}" class="logout-panel-btn">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/>
-                </svg>
-                Logout from Portal
-            </a>
-        </div>
-    </div>
-
-    <div class="form-note">Your school portal logo and credentials are stored for this tenant only, not shared with other tenant nodes.</div>
-</div>
+<h1>Portal Settings</h1>
+<div class="card"><form method="post" enctype="multipart/form-data">{% csrf_token %}<div class="form-group"><label>Admin Username</label><input type="text" name="admin_username" value="{{ tenant.admin_username }}"></div><div class="form-group"><label>Admin Password</label><input type="password" name="admin_password" placeholder="New password (leave blank to keep)"></div><div class="form-group"><label>School Logo</label><input type="file" name="school_logo" accept="image/*">{% if logo_url %}<img src="{{ logo_url }}" style="height: 60px; margin-top: 8px;">{% endif %}</div><button class="btn-primary">Save Settings</button></form></div>
 {% endblock %}

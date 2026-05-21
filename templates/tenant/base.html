@@ -3,389 +3,355 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';">
-    <title>{% block title %}School Portal{% endblock %}</title>
+    <title>{% block title %}AXIS School Portal{% endblock %}</title>
     <style>
         :root {
-            --bg: #f0f2f5;
+            --bg: #f8fafc;
             --surface: #ffffff;
-            --surface-alt: #f1f3f5;
-            --text: #1c1e21;
-            --muted: #65676b;
-            --primary: #1877f2;
-            --primary-strong: #166fe5;
-            --danger: #e41e3f;
-            --border: #e4e6eb;
-            --shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+            --surface-alt: #f1f5f9;
+            --text: #0f172a;
+            --muted: #475569;
+            --primary: #3b82f6;
+            --primary-dark: #2563eb;
+            --danger: #ef4444;
+            --border: #e2e8f0;
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            --radius: 0.75rem;
+            --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
         [data-theme="dark"] {
             --bg: #0f172a;
             --surface: #1e293b;
             --surface-alt: #334155;
-            --text: #f8fafc;
+            --text: #f1f5f9;
             --muted: #94a3b8;
-            --primary: #38bdf8;
-            --primary-strong: #0ea5e9;
+            --primary: #60a5fa;
+            --primary-dark: #3b82f6;
             --danger: #f87171;
             --border: #334155;
-            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            min-height: 100vh;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            color: var(--text);
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             background: var(--bg);
-            overflow-x: hidden;
+            color: var(--text);
+            line-height: 1.5;
         }
-        a { color: inherit; text-decoration: none; }
-        button, input, select, textarea { font: inherit; background: transparent; border: none; }
+        .app { display: flex; min-height: 100vh; }
         
-        .app-shell { display: flex; min-height: 100vh; }
-        
+        /* Sidebar base */
         .sidebar {
+            width: 280px;
             background: var(--surface);
             border-right: 1px solid var(--border);
-            padding: 20px 14px;
-            display: flex;
-            flex-direction: column;
             position: fixed;
             top: 0;
             bottom: 0;
             left: 0;
-            width: 260px;
-            height: 100vh;
-            z-index: 1000;
-            transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1), padding 0.2s;
-        }
-        
-        .page-body { 
-            margin-left: 260px; 
-            flex-grow: 1; 
-            padding: 32px 40px; 
-            min-height: 100vh;
-            transition: margin-left 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             display: flex;
             flex-direction: column;
+            transition: var(--transition);
+            z-index: 50;
+            box-shadow: var(--shadow-sm);
         }
-        .main-content-wrapper { flex: 1; }
-        .app-footer {
-            margin-top: 48px;
-            padding-top: 24px;
-            border-top: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            color: var(--muted);
-            font-size: 0.85rem;
+        /* Collapsed sidebar */
+        .sidebar.collapsed {
+            width: 80px;
         }
-        .footer-credits { font-weight: 500; }
-        .footer-links { display: flex; gap: 24px; }
-        .footer-links a { color: var(--muted); transition: color 0.15s; }
-        .footer-links a:hover { color: var(--primary); }
-        
-        body.sidebar-collapsed .sidebar { width: 72px; padding: 20px 8px; }
-        body.sidebar-collapsed .page-body { margin-left: 72px; }
-        
-        .brand-container {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 24px;
-            padding: 0 6px;
-            overflow: hidden;
-        }
-        .brand-core { display: flex; align-items: center; gap: 10px; overflow: hidden; cursor: pointer; }
-        .brand-logo { 
-            width: 36px; height: 36px; border-radius: 8px; display: grid; place-items: center; 
-            background: var(--primary); color: #ffffff; font-weight: 700; font-size: 0.95rem; flex-shrink: 0;
-        }
-        .brand-info { transition: opacity 0.15s; white-space: nowrap; }
-        .brand-title { font-weight: 600; font-size: 1rem; letter-spacing: -0.01em; max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
-        .brand-meta { color: var(--muted); font-size: 0.78rem; max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
-        
-        .sidebar-toggle-btn {
-            background: transparent; cursor: pointer; color: var(--muted);
-            padding: 6px; border-radius: 6px; display: grid; place-items: center;
-        }
-        .sidebar-toggle-btn:hover { background: var(--surface-alt); color: var(--text); }
-        
-        .sidebar-nav { list-style: none; display: flex; flex-direction: column; gap: 4px; }
-        .sidebar-nav a, .dropdown-toggle {
-            display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px;
-            color: var(--text); font-size: 0.92rem; font-weight: 500;
-            transition: background 0.15s; cursor: pointer;
-        }
-        .sidebar-nav a:hover, .dropdown-toggle:hover { background: var(--surface-alt); }
-        .sidebar-nav a.active, .dropdown-toggle.active { background: var(--surface-alt); color: var(--primary); font-weight: 600; }
-        .nav-label { transition: opacity 0.15s; white-space: nowrap; }
-        
-        body.sidebar-collapsed .brand-info,
-        body.sidebar-collapsed .nav-label,
-        body.sidebar-collapsed .footer-txt { display: none; opacity: 0; }
-        body.sidebar-collapsed .brand-container { justify-content: center; }
-        body.sidebar-collapsed .sidebar-toggle-btn { display: none; }
-        
-        .dropdown { position: relative; }
-        .dropdown-menu {
+        .sidebar.collapsed .school-name,
+        .sidebar.collapsed .nav-item span:not(.nav-icon),
+        .sidebar.collapsed .btn-text {
             display: none;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            min-width: 200px;
-            z-index: 1000;
-            box-shadow: var(--shadow);
-            padding: 8px 0;
-            margin-top: 4px;
         }
-        .dropdown-menu a {
-            display: block;
-            padding: 8px 16px;
+        .sidebar.collapsed .nav-item {
+            justify-content: center;
+            padding: 0.625rem;
+        }
+        .sidebar.collapsed .sidebar-header {
+            justify-content: center;
+            padding: 1.5rem 0.5rem;
+        }
+        .sidebar.collapsed .logo-area {
+            justify-content: center;
+            width: 100%;
+        }
+        .sidebar.collapsed .toggle-btn {
+            display: none;
+        }
+        .sidebar.collapsed .theme-toggle,
+        .sidebar.collapsed .logout-btn {
+            justify-content: center;
+            padding: 0.5rem;
+        }
+        .sidebar.collapsed .sidebar-footer {
+            align-items: center;
+        }
+        
+        .sidebar-header {
+            padding: 1.5rem 1.25rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: var(--transition);
+        }
+        .logo-area {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: var(--transition);
+            border-radius: var(--radius);
+            padding: 4px;
+        }
+        .logo-icon {
+            width: 42px;
+            height: 42px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1.25rem;
+            color: white;
+            box-shadow: var(--shadow-sm);
+            flex-shrink: 0;
+        }
+        .school-name {
+            font-weight: 700;
+            font-size: 1.1rem;
+            letter-spacing: -0.01em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 140px;
+            transition: var(--transition);
+        }
+        .toggle-btn {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px;
+            border-radius: var(--radius);
+            color: var(--muted);
+            transition: var(--transition);
+        }
+        .toggle-btn:hover {
+            background: var(--surface-alt);
+            color: var(--text);
+        }
+        .sidebar-nav {
+            flex: 1;
+            padding: 1rem 0.75rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 0.625rem 0.875rem;
+            border-radius: var(--radius);
             color: var(--text);
             text-decoration: none;
-            font-size: 0.85rem;
-            transition: background 0.15s;
+            transition: var(--transition);
+            font-weight: 500;
+            white-space: nowrap;
         }
-        .dropdown-menu a:hover { background: var(--surface-alt); }
-        
-        body.sidebar-collapsed .dropdown { position: static; }
-        body.sidebar-collapsed .dropdown-menu {
-            position: fixed;
-            left: 72px;
-            top: auto;
-            margin-left: 8px;
+        .nav-item:hover, .nav-item.active {
+            background: var(--surface-alt);
+            color: var(--primary);
         }
-        
+        .nav-icon {
+            width: 20px;
+            height: 20px;
+            stroke-width: 1.8;
+            flex-shrink: 0;
+        }
         .sidebar-footer {
-            margin-top: auto;
+            padding: 1rem 1.25rem;
             border-top: 1px solid var(--border);
-            padding-top: 12px;
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 0.75rem;
+            transition: var(--transition);
         }
-        .footer-row {
-            display: flex;
+        .main-content {
+            flex: 1;
+            margin-left: 280px;
+            padding: 2rem 2.5rem;
+            transition: var(--transition);
+        }
+        .sidebar.collapsed ~ .main-content {
+            margin-left: 80px;
+        }
+        
+        .theme-toggle, .logout-btn {
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
+            border-radius: 2rem;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            display: inline-flex;
             align-items: center;
-            justify-content: space-between;
-            padding: 4px 6px;
-            border-radius: 8px;
+            gap: 8px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            transition: var(--transition);
+            text-decoration: none;
+            color: var(--text);
         }
-        .footer-row-link {
-            display: flex; align-items: center; gap: 12px; padding: 10px 12px;
-            border-radius: 8px; color: var(--text); font-size: 0.92rem; font-weight: 500;
-            transition: background 0.15s; width: 100%;
+        .theme-toggle:hover, .logout-btn:hover {
+            background: var(--surface);
         }
-        .footer-row-link:hover { background: var(--surface-alt); }
-        .footer-row-link.active { background: var(--surface-alt); color: var(--primary); font-weight: 600; }
-        
-        body.sidebar-collapsed .footer-row-link { justify-content: center; padding: 10px 0; }
-        body.sidebar-collapsed .footer-row { justify-content: center; padding: 4px 0; }
-        
-        .footer-txt { font-size: 0.82rem; color: var(--muted); font-weight: 500; }
-        .theme-action-icon-btn {
-            cursor: pointer; color: var(--muted); padding: 6px; border-radius: 6px; display: grid; place-items: center;
+        .logout-btn {
+            color: var(--danger);
+            border-color: var(--danger);
         }
-        .theme-action-icon-btn:hover { background: var(--surface-alt); color: var(--text); }
-        
-        .page-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow); padding: 24px; }
-        .page-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 20px; }
-        .page-title { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
-        .page-description { font-size: 0.9rem; color: var(--muted); margin-top: 2px; }
-        
-        .grid-3 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 20px; }
-        .stat-card { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 6px; padding: 16px; }
-        .stat-label { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; font-weight: 600; letter-spacing: 0.03em; }
-        .stat-value { font-size: 1.5rem; font-weight: 700; margin-top: 4px; color: var(--text); }
-        
-        .form-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-top: 20px; }
-        .form-card h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
-        .field-card { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
-        .field-card label { font-size: 0.85rem; font-weight: 600; color: var(--text); }
-        .field-card input, .field-card select, .field-card textarea {
-            width: 100%; border-radius: 6px; border: 1px solid var(--border); padding: 10px 12px;
-            background: var(--surface-alt); color: var(--text); outline: none; font-size: 0.9rem;
+        .logout-btn:hover {
+            background: var(--danger);
+            color: white;
         }
-        .field-card input:focus { border-color: var(--primary); background: var(--surface); }
-        .field-card button { background: var(--primary); color: #ffffff; padding: 10px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.9rem; width: max-content; }
-        .field-card button:hover { background: var(--primary-strong); }
         
-        .logout-panel-btn {
-            display: inline-flex; align-items: center; gap: 8px; color: var(--danger);
-            border: 1px solid var(--border); padding: 8px 14px; border-radius: 6px;
-            font-size: 0.88rem; font-weight: 600; cursor: pointer; transition: background 0.15s; margin-top: 10px;
+        .message {
+            margin-bottom: 1.5rem;
+            padding: 0.75rem 1rem;
+            border-radius: var(--radius);
+            border-left: 4px solid;
+            background: var(--surface);
+            box-shadow: var(--shadow-sm);
         }
-        .logout-panel-btn:hover { background: #fff1f2; border-color: #fca5a5; }
-        [data-theme="dark"] .logout-panel-btn:hover { background: #7f1d1d; border-color: #ef4444; color: #fff; }
-
-        .logo-preview { height: 36px; width: auto; object-fit: contain; border-radius: 4px; }
-        .message-success { padding: 12px 14px; border-radius: 6px; background: #e6f4ea; color: #137333; font-size: 0.88rem; margin-bottom: 16px; border-left: 4px solid #137333; }
+        .message.success { border-color: #10b981; color: #065f46; background: #ecfdf5; }
+        .message.error { border-color: #ef4444; color: #991b1b; background: #fef2f2; }
+        [data-theme="dark"] .message.success { background: #064e3b; color: #d1fae5; }
+        [data-theme="dark"] .message.error { background: #7f1d1d; color: #fecaca; }
         
         @media (max-width: 768px) {
-            .sidebar { width: 72px; padding: 20px 8px; }
-            .sidebar .brand-info, .sidebar .nav-label, .sidebar .footer-txt { display: none; }
-            .sidebar .brand-container { justify-content: center; }
-            .sidebar .sidebar-toggle-btn { display: none; }
-            .page-body { margin-left: 72px; padding: 16px; }
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.collapsed ~ .main-content { margin-left: 0; }
+            .sidebar.collapsed { transform: translateX(0); width: 80px; }
+            .main-content { margin-left: 0; padding: 1rem; }
         }
-        
-        .dropdown-arrow { transition: transform 0.2s; margin-left: auto; }
-        .dropdown-toggle.open .dropdown-arrow { transform: rotate(180deg); }
     </style>
     {% block extra_head %}{% endblock %}
 </head>
 <body>
-    <div class="app-shell">
-        <aside class="sidebar">
-            <div class="brand-container">
-                <div class="brand-core" id="sidebarLogoBlock">
-                    <div class="brand-logo">{{ tenant.name|slice:":2"|upper }}</div>
-                    <div class="brand-info">
-                        <p class="brand-title" title="{{ tenant.name }}">{{ tenant.name }}</p>
-                        <p class="brand-meta">{% block sidebar_meta %}School Portal{% endblock %}</p>
-                    </div>
+    <div class="app">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-area">
+                    <div class="logo-icon">{{ tenant.name|slice:":2"|upper }}</div>
+                    <span class="school-name">{{ tenant.name }}</span>
                 </div>
-                <button onclick="toggleSidebar()" class="sidebar-toggle-btn" title="Collapse Sidebar">
+                <button class="toggle-btn" id="sidebarToggleBtn" title="Collapse">
                     <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>
                     </svg>
                 </button>
             </div>
-
             <nav class="sidebar-nav">
-                <a href="{% url 'school_portal' schema_name=tenant.schema_name %}">
-                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/>
-                    </svg>
-                    <span class="nav-label">Dashboard</span>
+                <a href="{% url 'dashboard' schema_name=tenant.schema_name %}" class="nav-item {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                    <span>Dashboard</span>
                 </a>
-                <a href="{% url 'school_portal_students' schema_name=tenant.schema_name %}">
-                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/>
-                    </svg>
-                    <span class="nav-label">Students</span>
+                <a href="{% url 'student_list' schema_name=tenant.schema_name %}" class="nav-item {% if 'student' in request.resolver_match.url_name %}active{% endif %}">
+                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                    <span>Students</span>
                 </a>
-                <div class="dropdown" id="feeDropdownContainer">
-                    <a href="#" class="dropdown-toggle" onclick="toggleFeeMenu(event)">
-                        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-6-6h12"/>
-                        </svg>
-                        <span class="nav-label">Fee Management</span>
-                        <svg class="dropdown-arrow" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
-                        </svg>
-                    </a>
-                    <div class="dropdown-menu" id="feeDropdownMenu">
-                        <a href="{% url 'fee_structure' schema_name=tenant.schema_name %}">📊 Fee Structure</a>
-                        <a href="{% url 'fee_generate' schema_name=tenant.schema_name %}">⚙️ Generate Fees</a>
-                        <a href="{% url 'pending_fees' schema_name=tenant.schema_name %}">⏳ Pending Fees</a>
-                        <a href="{% url 'payment_history' schema_name=tenant.schema_name %}">📜 Payment History</a>
-                        <a href="{% url 'family_payment' schema_name=tenant.schema_name %}">👨‍👩‍👧 Family Payment</a>
-                        <a href="{% url 'fee_settings' schema_name=tenant.schema_name %}">⚙️ Settings</a>
-                    </div>
-                </div>
+                <a href="{% url 'fee_collection' schema_name=tenant.schema_name %}" class="nav-item">
+                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm0 0v2"/></svg>
+                    <span>Fee Collection</span>
+                </a>
+                <a href="{% url 'defaulters' schema_name=tenant.schema_name %}" class="nav-item">
+                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span>Defaulters</span>
+                </a>
+                <a href="{% url 'reports' schema_name=tenant.schema_name %}" class="nav-item">
+                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                    <span>Reports</span>
+                </a>
+                <a href="{% url 'fee_structure' schema_name=tenant.schema_name %}" class="nav-item">
+                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                    <span>Fee Structure</span>
+                </a>
+                <a href="{% url 'fee_settings' schema_name=tenant.schema_name %}" class="nav-item">
+                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    <span>Settings</span>
+                </a>
             </nav>
-
             <div class="sidebar-footer">
-                <a href="{% url 'school_portal_settings' schema_name=tenant.schema_name %}" class="footer-row-link">
-                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.43l-1.003.767a1.123 1.123 0 00-.417 1.03c.004.074.006.148.006.222 0 .074-.002.148-.006.222a1.123 1.123 0 00.417 1.03l1.003.767a1.125 1.125 0 01.26 1.43l-1.296 2.247a1.125 1.125 0 01-1.37.49l-1.216-.456a1.125 1.125 0 00-1.076.124c-.073.044-.146.087-.22.128-.332.183-.582.495-.644.869l-.214 1.28c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281a1.125 1.125 0 00-.646-.87c-.074-.04-.148-.083-.22-.127a1.124 1.124 0 00-1.075-.124l-1.217.456a1.125 1.125 0 01-1.37-.49l-1.296-2.247a1.125 1.125 0 01.26-1.43l1.003-.767a1.122 1.122 0 00.417-1.03c-.004-.074-.006-.148-.006-.222 0-.074.002-.148.006-.222a1.122 1.122 0 00-.417-1.03l-1.003-.767a1.125 1.125 0 01-.26-1.43l1.296-2.247a1.125 1.125 0 011.37-.49l1.216.456c.356.133.751.072 1.076-.124.072-.041.146-.084.218-.128.333-.183.582-.495.645-.869l.214-1.28z"/>
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                <button onclick="toggleTheme()" class="theme-toggle">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
                     </svg>
-                    <span class="nav-label">Settings</span>
+                    <span class="btn-text">Theme</span>
+                </button>
+                <a href="{% url 'tenant_logout' schema_name=tenant.schema_name %}" class="logout-btn">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/>
+                    </svg>
+                    <span class="btn-text">Logout</span>
                 </a>
-                <div class="footer-row">
-                    <span class="footer-txt">System Mode</span>
-                    <button onclick="toggleTheme()" class="theme-action-icon-btn" title="Toggle Appearance">
-                        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m0 13.5V21M5.136 5.136l1.591 1.591M17.273 17.273l1.591 1.591M21 12h-2.25M5.25 12H3m14.273-6.864l-1.591 1.591M6.727 16.727l-1.591 1.591M12 7.5a4.5 4.5 0 100 9 4.5 4.5 0 000-9z"/>
-                        </svg>
-                    </button>
-                </div>
             </div>
         </aside>
-
-        <main class="page-body">
-            {% if messages %}
-                {% include "tenant/messages.html" %}
-            {% endif %}
-            <div class="main-content-wrapper">
-                {% block body %}{% endblock %}
-            </div>
-            <footer class="app-footer">
-                <div class="footer-credits">&copy; 2026 AXIS School Management System. All rights reserved.</div>
-                <div class="footer-links">
-                    <a href="#">Terms of Service</a>
-                    <a href="#">Privacy Policy</a>
-                    <a href="#">Support Hub</a>
-                </div>
-            </footer>
+        <main class="main-content" id="mainContent">
+            {% include "tenant/messages.html" %}
+            {% block body %}{% endblock %}
         </main>
     </div>
-
     <script>
-        const root = document.documentElement;
-        const currentTheme = localStorage.getItem('schoolPortalTheme');
-        if (currentTheme) root.setAttribute('data-theme', currentTheme);
-
-        function toggleTheme() {
-            const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-            root.setAttribute('data-theme', next);
-            localStorage.setItem('schoolPortalTheme', next);
+        const sidebar = document.getElementById('sidebar');
+        const toggleBtn = document.getElementById('sidebarToggleBtn');
+        
+        // Load saved collapse state
+        const savedState = localStorage.getItem('sidebarCollapsed');
+        if (savedState === 'true') {
+            sidebar.classList.add('collapsed');
         }
-
+        
+        // Toggle function
         function toggleSidebar() {
-            document.body.classList.toggle('sidebar-collapsed');
-            const isCollapsed = document.body.classList.contains('sidebar-collapsed');
-            localStorage.setItem('sidebarState', isCollapsed ? 'collapsed' : 'expanded');
-            // Close dropdown when collapsing
+            sidebar.classList.toggle('collapsed');
+            const isCollapsed = sidebar.classList.contains('collapsed');
+            localStorage.setItem('sidebarCollapsed', isCollapsed);
+            // Change button icon direction
+            const svg = toggleBtn.querySelector('svg');
             if (isCollapsed) {
-                const menu = document.getElementById('feeDropdownMenu');
-                if (menu) menu.style.display = 'none';
-                const toggle = document.querySelector('.dropdown-toggle');
-                if (toggle) toggle.classList.remove('open');
+                svg.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7"/>';
+            } else {
+                svg.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>';
             }
         }
-
-        function toggleFeeMenu(event) {
-            event.preventDefault();
-            event.stopPropagation();
-            const menu = document.getElementById('feeDropdownMenu');
-            const toggle = document.querySelector('.dropdown-toggle');
-            if (menu) {
-                const isVisible = menu.style.display === 'block';
-                menu.style.display = isVisible ? 'none' : 'block';
-                if (toggle) toggle.classList.toggle('open', !isVisible);
-            }
+        
+        toggleBtn.addEventListener('click', toggleSidebar);
+        
+        // Also allow clicking on logo area to toggle (optional)
+        const logoArea = document.querySelector('.logo-area');
+        if (logoArea) {
+            logoArea.style.cursor = 'pointer';
+            logoArea.addEventListener('click', toggleSidebar);
         }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            const sidebarState = localStorage.getItem('sidebarState');
-            if (sidebarState === 'collapsed') {
-                document.body.classList.add('sidebar-collapsed');
-            }
-            
-            const logoBlock = document.getElementById('sidebarLogoBlock');
-            if (logoBlock) {
-                logoBlock.addEventListener('click', () => {
-                    if (document.body.classList.contains('sidebar-collapsed')) {
-                        toggleSidebar();
-                    }
-                });
-            }
-            
-            // Close dropdown when clicking outside
-            document.addEventListener('click', function(event) {
-                const container = document.getElementById('feeDropdownContainer');
-                const menu = document.getElementById('feeDropdownMenu');
-                if (container && menu && !container.contains(event.target)) {
-                    menu.style.display = 'none';
-                    const toggle = document.querySelector('.dropdown-toggle');
-                    if (toggle) toggle.classList.remove('open');
-                }
-            });
-        });
+        
+        // Theme toggle
+        const root = document.documentElement;
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark') root.setAttribute('data-theme', 'dark');
+        function toggleTheme() {
+            const isDark = root.getAttribute('data-theme') === 'dark';
+            root.setAttribute('data-theme', isDark ? 'light' : 'dark');
+            localStorage.setItem('theme', isDark ? 'light' : 'dark');
+        }
+        
+        // Ensure button icon matches initial state
+        if (sidebar.classList.contains('collapsed')) {
+            const svg = toggleBtn.querySelector('svg');
+            svg.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7"/>';
+        }
     </script>
 </body>
 </html>

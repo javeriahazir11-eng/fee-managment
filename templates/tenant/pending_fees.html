@@ -37,7 +37,7 @@
                     <span class="status-badge status-{{ fr.status }}">{{ fr.get_status_display }}</span>
                 </td>
                 <td>
-                    <a href="{% url 'make_payment' schema_name=tenant.schema_name student_id=fr.student.id %}" class="btn-small">
+                    <a href="{% url 'fee_collection' schema_name=tenant.schema_name student_id=fr.student.id %}" class="btn-small">
                         Pay Now
                     </a>
                 </td>
