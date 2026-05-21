@@ -20,7 +20,6 @@ class FeeCollectionForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # We'll set queryset in view with schema context
         self.fields['student'].queryset = Student.objects.all()
 
 class FeeStructureForm(forms.ModelForm):

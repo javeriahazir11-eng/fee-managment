@@ -8,7 +8,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from .models import SchoolClient
 from .views import dashboard, student_list, student_profile, fee_collection, fee_receipt
 from .views import defaulters, reports, settings, fee_structure, fee_settings, family_payment
-from .views import student_search_api, add_student, edit_student
+from .views import student_search_api, add_student, edit_student, fee_status_api, manual_generate_api, manual_generate_single_api
 
 def saas_homepage(request):
     return HttpResponse('<h1>AXIS School Management System</h1><p>Welcome to Multi-Tenant Platform</p>')
@@ -55,6 +55,9 @@ edit_student_view = login_required_for_schema(edit_student)
 urlpatterns = [
     path('', saas_homepage),
     path('admin/', admin.site.urls),
+    path('api/fee-status/', fee_status_api, name='fee_status_api'),
+    path('api/manual-generate/', manual_generate_api, name='manual_generate_api'),
+    path('api/manual-generate-single/', manual_generate_single_api, name='manual_generate_single_api'),
     
     # Auth
     path('portal/<slug:schema_name>/login/', school_login, name='school_login'),
@@ -69,7 +72,7 @@ urlpatterns = [
     path('portal/<slug:schema_name>/students/edit/<int:student_id>/', edit_student_view, name='edit_student'),
     path('portal/<slug:schema_name>/students/<int:student_id>/', student_profile_view, name='student_profile'),
     
-    # Fee collection - single pattern with optional student_id
+    # Fee collection
     re_path(r'^portal/(?P<schema_name>[a-zA-Z0-9_-]+)/fee/collection/(?:(?P<student_id>\d+)/)?$', fee_collection_view, name='fee_collection'),
     
     path('portal/<slug:schema_name>/fee/receipt/<int:receipt_id>/', fee_receipt_view, name='fee_receipt'),

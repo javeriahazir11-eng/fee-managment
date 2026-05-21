@@ -5,45 +5,57 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}AXIS School Portal{% endblock %}</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         :root {
-            --bg: #f8fafc;
-            --surface: #ffffff;
-            --surface-alt: #f1f5f9;
-            --text: #0f172a;
-            --muted: #475569;
+            --bg: #f0f2f5;
+            --surface: rgba(255, 255, 255, 0.9);
+            --surface-alt: rgba(249, 250, 251, 0.8);
+            --text: #1f2937;
+            --muted: #6b7280;
             --primary: #3b82f6;
             --primary-dark: #2563eb;
             --danger: #ef4444;
-            --border: #e2e8f0;
-            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-            --radius: 0.75rem;
+            --border: rgba(0, 0, 0, 0.1);
+            --shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+            --radius: 1rem;
             --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
+
         [data-theme="dark"] {
             --bg: #0f172a;
-            --surface: #1e293b;
-            --surface-alt: #334155;
+            --surface: rgba(30, 41, 59, 0.9);
+            --surface-alt: rgba(51, 65, 85, 0.8);
             --text: #f1f5f9;
             --muted: #94a3b8;
             --primary: #60a5fa;
             --primary-dark: #3b82f6;
             --danger: #f87171;
-            --border: #334155;
+            --border: rgba(255, 255, 255, 0.1);
         }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
-            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
             background: var(--bg);
             color: var(--text);
             line-height: 1.5;
+            backdrop-filter: blur(2px);
         }
-        .app { display: flex; min-height: 100vh; }
-        
-        /* Sidebar base */
+
+        .app {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Glassmorphism Sidebar */
         .sidebar {
             width: 280px;
             background: var(--surface);
+            backdrop-filter: blur(12px);
             border-right: 1px solid var(--border);
             position: fixed;
             top: 0;
@@ -53,97 +65,81 @@
             flex-direction: column;
             transition: var(--transition);
             z-index: 50;
-            box-shadow: var(--shadow-sm);
+            box-shadow: var(--shadow);
         }
-        /* Collapsed sidebar */
+
         .sidebar.collapsed {
             width: 80px;
         }
+
         .sidebar.collapsed .school-name,
         .sidebar.collapsed .nav-item span:not(.nav-icon),
         .sidebar.collapsed .btn-text {
             display: none;
         }
+
         .sidebar.collapsed .nav-item {
             justify-content: center;
             padding: 0.625rem;
         }
+
         .sidebar.collapsed .sidebar-header {
             justify-content: center;
             padding: 1.5rem 0.5rem;
         }
+
         .sidebar.collapsed .logo-area {
             justify-content: center;
             width: 100%;
         }
+
         .sidebar.collapsed .toggle-btn {
             display: none;
         }
-        .sidebar.collapsed .theme-toggle,
-        .sidebar.collapsed .logout-btn {
-            justify-content: center;
-            padding: 0.5rem;
-        }
-        .sidebar.collapsed .sidebar-footer {
-            align-items: center;
-        }
-        
+
         .sidebar-header {
             padding: 1.5rem 1.25rem;
             border-bottom: 1px solid var(--border);
             display: flex;
             align-items: center;
             justify-content: space-between;
-            transition: var(--transition);
         }
+
         .logo-area {
             display: flex;
             align-items: center;
             gap: 12px;
-            transition: var(--transition);
-            border-radius: var(--radius);
-            padding: 4px;
+            cursor: pointer;
         }
+
         .logo-icon {
             width: 42px;
             height: 42px;
             background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-            border-radius: 12px;
+            border-radius: 14px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 800;
             font-size: 1.25rem;
             color: white;
-            box-shadow: var(--shadow-sm);
-            flex-shrink: 0;
+            box-shadow: 0 4px 10px rgba(59,130,246,0.3);
         }
+
         .school-name {
             font-weight: 700;
             font-size: 1.1rem;
-            letter-spacing: -0.01em;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 140px;
-            transition: var(--transition);
         }
+
         .toggle-btn {
             background: transparent;
             border: none;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 6px;
-            border-radius: var(--radius);
             color: var(--muted);
-            transition: var(--transition);
+            padding: 6px;
+            border-radius: 8px;
         }
-        .toggle-btn:hover {
-            background: var(--surface-alt);
-            color: var(--text);
-        }
+
         .sidebar-nav {
             flex: 1;
             padding: 1rem 0.75rem;
@@ -151,46 +147,38 @@
             flex-direction: column;
             gap: 0.25rem;
         }
+
         .nav-item {
             display: flex;
             align-items: center;
             gap: 12px;
             padding: 0.625rem 0.875rem;
-            border-radius: var(--radius);
+            border-radius: 12px;
             color: var(--text);
             text-decoration: none;
             transition: var(--transition);
             font-weight: 500;
-            white-space: nowrap;
         }
+
         .nav-item:hover, .nav-item.active {
-            background: var(--surface-alt);
+            background: rgba(59,130,246,0.15);
             color: var(--primary);
         }
+
         .nav-icon {
             width: 20px;
             height: 20px;
             stroke-width: 1.8;
-            flex-shrink: 0;
         }
+
         .sidebar-footer {
             padding: 1rem 1.25rem;
             border-top: 1px solid var(--border);
             display: flex;
             flex-direction: column;
             gap: 0.75rem;
-            transition: var(--transition);
         }
-        .main-content {
-            flex: 1;
-            margin-left: 280px;
-            padding: 2rem 2.5rem;
-            transition: var(--transition);
-        }
-        .sidebar.collapsed ~ .main-content {
-            margin-left: 80px;
-        }
-        
+
         .theme-toggle, .logout-btn {
             background: var(--surface-alt);
             border: 1px solid var(--border);
@@ -206,36 +194,128 @@
             text-decoration: none;
             color: var(--text);
         }
-        .theme-toggle:hover, .logout-btn:hover {
-            background: var(--surface);
-        }
+
         .logout-btn {
             color: var(--danger);
             border-color: var(--danger);
         }
+
         .logout-btn:hover {
             background: var(--danger);
             color: white;
         }
-        
-        .message {
-            margin-bottom: 1.5rem;
-            padding: 0.75rem 1rem;
-            border-radius: var(--radius);
-            border-left: 4px solid;
-            background: var(--surface);
-            box-shadow: var(--shadow-sm);
+
+        .main-content {
+            flex: 1;
+            margin-left: 280px;
+            padding: 2rem 2rem;
+            transition: var(--transition);
         }
-        .message.success { border-color: #10b981; color: #065f46; background: #ecfdf5; }
-        .message.error { border-color: #ef4444; color: #991b1b; background: #fef2f2; }
-        [data-theme="dark"] .message.success { background: #064e3b; color: #d1fae5; }
-        [data-theme="dark"] .message.error { background: #7f1d1d; color: #fecaca; }
-        
+
+        .sidebar.collapsed ~ .main-content {
+            margin-left: 80px;
+        }
+
+        /* Cards */
+        .stat-card, .card, .chart-card, .filter-card, .students-list-card, .student-panel, .history-card {
+            background: var(--surface);
+            backdrop-filter: blur(8px);
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--shadow);
+            transition: var(--transition);
+        }
+
+        .stat-card:hover, .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px rgba(0,0,0,0.12);
+        }
+
+        .page-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 0.25rem;
+        }
+
+        .page-desc {
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+
+        .btn-primary, .btn-secondary {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.6rem 1.2rem;
+            border-radius: 2rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            border: none;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: var(--surface-alt);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        /* Tables */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .data-table th, .data-table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .data-table th {
+            background: var(--surface-alt);
+            font-weight: 600;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.2rem 0.6rem;
+            border-radius: 2rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+
         @media (max-width: 768px) {
-            .sidebar { transform: translateX(-100%); }
-            .sidebar.collapsed ~ .main-content { margin-left: 0; }
-            .sidebar.collapsed { transform: translateX(0); width: 80px; }
-            .main-content { margin-left: 0; padding: 1rem; }
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            .sidebar.collapsed {
+                transform: translateX(0);
+                width: 80px;
+            }
+            .main-content {
+                margin-left: 0;
+                padding: 1rem;
+            }
         }
     </style>
     {% block extra_head %}{% endblock %}
@@ -244,7 +324,7 @@
     <div class="app">
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <div class="logo-area">
+                <div class="logo-area" id="logoArea">
                     <div class="logo-icon">{{ tenant.name|slice:":2"|upper }}</div>
                     <span class="school-name">{{ tenant.name }}</span>
                 </div>
@@ -256,45 +336,41 @@
             </div>
             <nav class="sidebar-nav">
                 <a href="{% url 'dashboard' schema_name=tenant.schema_name %}" class="nav-item {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
-                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
                     <span>Dashboard</span>
                 </a>
                 <a href="{% url 'student_list' schema_name=tenant.schema_name %}" class="nav-item {% if 'student' in request.resolver_match.url_name %}active{% endif %}">
-                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
                     <span>Students</span>
                 </a>
                 <a href="{% url 'fee_collection' schema_name=tenant.schema_name %}" class="nav-item">
-                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm0 0v2"/></svg>
+                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
                     <span>Fee Collection</span>
                 </a>
                 <a href="{% url 'defaulters' schema_name=tenant.schema_name %}" class="nav-item">
-                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                     <span>Defaulters</span>
                 </a>
                 <a href="{% url 'reports' schema_name=tenant.schema_name %}" class="nav-item">
-                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
                     <span>Reports</span>
                 </a>
                 <a href="{% url 'fee_structure' schema_name=tenant.schema_name %}" class="nav-item">
-                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
                     <span>Fee Structure</span>
                 </a>
                 <a href="{% url 'fee_settings' schema_name=tenant.schema_name %}" class="nav-item">
-                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                     <span>Settings</span>
                 </a>
             </nav>
             <div class="sidebar-footer">
                 <button onclick="toggleTheme()" class="theme-toggle">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
-                    </svg>
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
                     <span class="btn-text">Theme</span>
                 </button>
                 <a href="{% url 'tenant_logout' schema_name=tenant.schema_name %}" class="logout-btn">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/>
-                    </svg>
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>
                     <span class="btn-text">Logout</span>
                 </a>
             </div>
@@ -307,19 +383,13 @@
     <script>
         const sidebar = document.getElementById('sidebar');
         const toggleBtn = document.getElementById('sidebarToggleBtn');
-        
-        // Load saved collapse state
+        const logoArea = document.getElementById('logoArea');
         const savedState = localStorage.getItem('sidebarCollapsed');
-        if (savedState === 'true') {
-            sidebar.classList.add('collapsed');
-        }
-        
-        // Toggle function
+        if (savedState === 'true') sidebar.classList.add('collapsed');
         function toggleSidebar() {
             sidebar.classList.toggle('collapsed');
             const isCollapsed = sidebar.classList.contains('collapsed');
             localStorage.setItem('sidebarCollapsed', isCollapsed);
-            // Change button icon direction
             const svg = toggleBtn.querySelector('svg');
             if (isCollapsed) {
                 svg.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7"/>';
@@ -327,17 +397,8 @@
                 svg.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>';
             }
         }
-        
         toggleBtn.addEventListener('click', toggleSidebar);
-        
-        // Also allow clicking on logo area to toggle (optional)
-        const logoArea = document.querySelector('.logo-area');
-        if (logoArea) {
-            logoArea.style.cursor = 'pointer';
-            logoArea.addEventListener('click', toggleSidebar);
-        }
-        
-        // Theme toggle
+        logoArea.addEventListener('click', toggleSidebar);
         const root = document.documentElement;
         const savedTheme = localStorage.getItem('theme');
         if (savedTheme === 'dark') root.setAttribute('data-theme', 'dark');
@@ -346,11 +407,8 @@
             root.setAttribute('data-theme', isDark ? 'light' : 'dark');
             localStorage.setItem('theme', isDark ? 'light' : 'dark');
         }
-        
-        // Ensure button icon matches initial state
         if (sidebar.classList.contains('collapsed')) {
-            const svg = toggleBtn.querySelector('svg');
-            svg.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7"/>';
+            toggleBtn.querySelector('svg').innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7"/>';
         }
     </script>
 </body>

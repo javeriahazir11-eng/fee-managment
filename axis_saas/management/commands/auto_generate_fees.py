@@ -4,24 +4,27 @@ from axis_saas.models import SchoolClient, SchoolFeeSettings, Student, FeeRecord
 from datetime import date, timedelta
 
 class Command(BaseCommand):
-    help = 'Generate monthly fees for all tenants based on their generation day'
+    help = 'Automatically generate monthly fees for all tenants based on their generation day'
 
     def handle(self, *args, **options):
         tenants = SchoolClient.objects.filter(is_active=True).exclude(schema_name='public')
         today = date.today()
         for tenant in tenants:
             with schema_context(tenant.schema_name):
-                settings, _ = SchoolFeeSettings.objects.get_or_create(tenant=tenant)
+                settings, _ = SchoolFeeSettings.objects.get_or_create(pk=1)
                 if today.day == settings.fee_generation_day:
                     month, year = today.month, today.year
                     if FeeRecord.objects.filter(month=month, year=year).exists():
+                        self.stdout.write(f"{tenant.schema_name}: fees already generated for {month}/{year}")
                         continue
                     due_date = today + timedelta(days=settings.due_date_offset)
                     students = Student.objects.filter(status='active')
                     created = 0
                     for s in students:
-                        fee = s.custom_fee or (FeeStructure.objects.filter(grade=s.grade).first().monthly_fee if FeeStructure.objects.filter(grade=s.grade).exists() else 0)
+                        fee = s.custom_fee if s.custom_fee > 0 else (FeeStructure.objects.filter(grade=s.grade).first().monthly_fee if FeeStructure.objects.filter(grade=s.grade).exists() else 0)
                         if fee:
                             FeeRecord.objects.get_or_create(student=s, month=month, year=year, defaults={'amount': fee, 'due_date': due_date})
                             created += 1
                     self.stdout.write(f"{tenant.schema_name}: generated {created} records for {month}/{year}")
+                else:
+                    self.stdout.write(f"{tenant.schema_name}: generation day {settings.fee_generation_day} not today")

@@ -68,7 +68,6 @@ class Student(models.Model):
                 self.roll_number = str(int(last.roll_number) + 1)
             else:
                 self.roll_number = "1001"
-        # Auto assign fee from FeeStructure if custom_fee is zero
         if not self.pk or self.custom_fee == 0:
             base = FeeStructure.objects.filter(grade=self.grade).first()
             if base:
@@ -89,7 +88,6 @@ class FeeStructure(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        # Cascade update all students of this grade
         Student.objects.filter(grade=self.grade).update(custom_fee=self.monthly_fee)
 
 # ------------------- Fee Record (Monthly) -------------------
@@ -149,7 +147,7 @@ class PaymentTransaction(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     payment_date = models.DateField(auto_now_add=True)
     payment_mode = models.CharField(max_length=20, choices=PAYMENT_MODE_CHOICES, default='cash')
-    payment_type = models.CharField(max_length=20, default='full')  # full/partial
+    payment_type = models.CharField(max_length=20, default='full')
     receipt_number = models.CharField(max_length=50, unique=True, blank=True)
     remarks = models.TextField(blank=True, null=True)
     created_by = models.CharField(max_length=150, blank=True)
@@ -165,9 +163,8 @@ class PaymentTransaction(models.Model):
     def __str__(self):
         return f"{self.receipt_number} - {self.student.name} - ₹{self.amount}"
 
-# ------------------- School Fee Settings -------------------
+# ------------------- School Fee Settings (Tenant-specific, no FK) -------------------
 class SchoolFeeSettings(models.Model):
-    tenant = models.OneToOneField(SchoolClient, on_delete=models.CASCADE, related_name='fee_settings')
     fee_generation_day = models.PositiveSmallIntegerField(default=1, help_text="Day of month (1-31)")
     due_date_offset = models.PositiveSmallIntegerField(default=15, help_text="Days after generation when fee is due")
     late_fee_penalty = models.DecimalField(max_digits=5, decimal_places=2, default=0.00, help_text="Penalty %")
@@ -175,4 +172,4 @@ class SchoolFeeSettings(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"Settings for {self.tenant.name}"
+        return "Fee Settings"

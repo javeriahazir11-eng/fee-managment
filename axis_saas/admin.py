@@ -25,7 +25,6 @@ class PublicOnlyAdminMixin:
         return request.tenant.schema_name == 'public'
 
     def get_queryset(self, request):
-        # Explicitly filters out the 'public' master tenant row from the display matrix
         qs = super().get_queryset(request)
         return qs.exclude(schema_name='public')
     def has_add_permission(self, request):
@@ -48,7 +47,6 @@ class SchoolClientForm(forms.ModelForm):
         if self.instance.pk and self.instance.schema_name == 'public' and schema != 'public':
             raise ValidationError("CRITICAL ERROR: The core public operational schema token cannot be renamed.")
         
-        # Check if schema already exists in DB to prevent orphan schema takeovers
         from django.db import connection
         with connection.cursor() as cursor:
             cursor.execute("SELECT schema_name FROM information_schema.schemata WHERE schema_name = %s", [schema])
@@ -78,13 +76,11 @@ class SchoolClientAdmin(TenantAdminMixin, admin.ModelAdmin):
     )
 
     def get_readonly_fields(self, request, obj=None):
-        # If modifying the absolute root 'public' schema, lock the fields down to prevent human errors
         if obj and obj.schema_name == 'public':
             return self.readonly_fields + ('schema_name', 'admin_username', 'is_active')
         return self.readonly_fields
 
     def has_delete_permission(self, request, obj=None):
-        # ABSOLUTE KILL SWITCH BLOCK: Completely bars the system from ever deleting the public master node via GUI
         if obj and obj.schema_name == 'public':
             return False
         return request.tenant.schema_name == 'public'
@@ -111,7 +107,6 @@ class SchoolClientAdmin(TenantAdminMixin, admin.ModelAdmin):
         return request.tenant.schema_name == 'public'
 
     def get_queryset(self, request):
-        # Explicitly filters out the 'public' master tenant row from the display matrix
         qs = super().get_queryset(request)
         return qs.exclude(schema_name='public')
 
@@ -169,7 +164,6 @@ from django.contrib.auth.models import User, Group
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 
-# Completely unregister default configurations from the shared fallback registry
 try:
     admin.site.unregister(User)
     admin.site.unregister(Group)
@@ -179,7 +173,6 @@ except admin.sites.NotRegistered:
 @admin.register(User)
 class TenantSecuredUserAdmin(BaseUserAdmin):
     def has_module_permission(self, request):
-        # Master global admin retains full visual scope. Tenant nodes see nothing.
         return request.tenant.schema_name == 'public'
 
     def has_view_permission(self, request, obj=None):
@@ -195,7 +188,6 @@ class TenantSecuredUserAdmin(BaseUserAdmin):
         return request.tenant.schema_name == 'public'
 
     def save_model(self, request, obj, form, change):
-        # Strict dynamic execution block: No school admin can ever escalate an account to superuser boundaries
         if request.tenant.schema_name != 'public':
             obj.is_superuser = False
         super().save_model(request, obj, form, change)
@@ -233,6 +225,9 @@ class PaymentTransactionAdmin(admin.ModelAdmin):
     list_filter = ('payment_type', 'payment_mode', 'payment_date')
     search_fields = ('receipt_number', 'student__name', 'student__father_cnic')
 
+# Updated: removed 'tenant' from list_display and list_filter
 @admin.register(SchoolFeeSettings)
 class SchoolFeeSettingsAdmin(admin.ModelAdmin):
-    list_display = ('tenant', 'fee_generation_day', 'due_date_offset', 'late_fee_penalty')
+    list_display = ('fee_generation_day', 'due_date_offset', 'late_fee_penalty', 'updated_at')
+    list_filter = ('fee_generation_day',)
+    search_fields = ('fee_generation_day',)

@@ -1,71 +1,102 @@
 {% extends 'tenant/base.html' %}
 {% block title %}Fee Collection | {{ tenant.name }}{% endblock %}
 {% block body %}
-<!-- Header with stats -->
 <div class="page-header">
     <div>
         <h1 class="page-title">Fee Collection</h1>
-        <p class="page-desc">Collect fees, view pending records, and track payment history</p>
+        <p class="page-desc">Collect fees, generate monthly fee records, and print receipts</p>
     </div>
     <div class="header-stats">
         <div class="stat-badge">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8c-3.31 0-6 1.79-6 4s2.69 4 6 4 6-1.79 6-4-2.69-4-6-4z"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
             <span>Today: ₹{{ today_collection|default:0 }}</span>
         </div>
         <div class="stat-badge">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h3l3-9 3 18 3-9h3"/></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12h3l3-9 3 18 3-9h3"/></svg>
             <span>Pending Total: ₹{{ total_pending_all|default:0 }}</span>
         </div>
+        <button id="generateAllBtn" class="stat-badge" style="background: var(--primary); color: white; border: none; cursor: pointer;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Generate All Fees
+        </button>
     </div>
 </div>
 
-<!-- Search & Student Selector -->
-<div class="search-card">
-    <div class="search-input-group">
-        <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-        <input type="text" id="studentSearch" placeholder="Search by name, roll number or father name..." class="search-input">
+<!-- Search Student -->
+<div class="filter-card">
+    <div class="card-header">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        <h3>Find Student by Roll Number / Name / CNIC</h3>
     </div>
-    <div id="searchResults" class="search-results"></div>
+    <div class="search-form">
+        <input type="text" id="studentSearchInput" class="search-input" placeholder="e.g., 1001, samjh, 12345...">
+        <button id="searchStudentBtn" class="btn-primary">Search</button>
+    </div>
+    <div id="searchResult" class="search-result" style="display:none;"></div>
+</div>
+
+<!-- Students with Pending Fees -->
+<div class="students-list-card">
+    <div class="card-header">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+        <h3>Students with Pending Fees ({{ pending_students|length }})</h3>
+        <input type="text" id="pendingSearch" placeholder="Filter list..." class="search-small">
+    </div>
+    <div id="pendingStudentsContainer">
+        {% for s in pending_students %}
+        <div class="student-item" data-id="{{ s.id }}">
+            <div class="student-info">
+                <strong>{{ s.name }}</strong>
+                <span class="roll">{{ s.roll_number }}</span>
+                <span class="class">{{ s.grade }} - {{ s.section }}</span>
+            </div>
+            <div class="pending-amount">₹{{ s.pending_total }}</div>
+            <button class="select-student-btn" data-id="{{ s.id }}">Select</button>
+        </div>
+        {% empty %}
+        <div class="empty-row">🎉 No students with pending fees! All caught up.</div>
+        {% endfor %}
+    </div>
 </div>
 
 <!-- Selected Student & Payment Form -->
 {% if selected_student %}
-<div class="student-panel">
+<div class="student-panel" id="studentPanel">
     <div class="student-info">
         <div class="student-avatar">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
         </div>
         <div>
             <h3>{{ selected_student.name }} <span class="roll">({{ selected_student.roll_number }})</span></h3>
-            <p class="class-info">{{ selected_student.grade }} - {{ selected_student.section }} | Father: {{ selected_student.father_name }}</p>
+            <p class="class-info">{{ selected_student.grade }} - {{ selected_student.section }} | Father: {{ selected_student.father_name }} | CNIC: {{ selected_student.father_cnic }}</p>
         </div>
         <div class="pending-badge">Pending: ₹{{ total_pending }}</div>
     </div>
 
-    <form method="post" class="payment-form">
+    <form method="post" class="payment-form" id="paymentForm">
         {% csrf_token %}
         <input type="hidden" name="student_id" value="{{ selected_student.id }}">
         <div class="form-row">
             <div class="form-field">
-                <label>Amount (₹)</label>
-                <input type="number" name="amount" step="0.01" required placeholder="Enter amount">
+                <label>Amount Received (₹)</label>
+                <input type="number" name="amount" id="amountInput" step="0.01" required placeholder="Enter amount">
             </div>
             <div class="form-field">
                 <label>Payment Mode</label>
                 <select name="payment_mode">
-                    <option value="cash">💵 Cash</option>
-                    <option value="bank_transfer">🏦 Bank Transfer</option>
-                    <option value="cheque">📝 Cheque</option>
-                    <option value="online">🌐 Online</option>
+                    <option value="cash">Cash</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="cheque">Cheque</option>
+                    <option value="online">Online</option>
                 </select>
             </div>
             <div class="form-field">
-                <label>Remarks (Optional)</label>
-                <textarea name="remarks" rows="1" placeholder="Any notes..."></textarea>
+                <label>Remaining After Payment</label>
+                <input type="text" id="remainingAfter" readonly placeholder="Will be calculated">
             </div>
             <div class="form-field submit-field">
                 <button type="submit" class="btn-primary">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
                     Process Payment
                 </button>
             </div>
@@ -78,13 +109,7 @@
         <div class="table-responsive">
             <table class="data-table">
                 <thead>
-                    <tr>
-                        <th>Month/Year</th>
-                        <th>Amount (₹)</th>
-                        <th>Paid (₹)</th>
-                        <th>Remaining (₹)</th>
-                        <th>Due Date</th>
-                    </tr>
+                    <tr><th>Month/Year</th><th>Amount (₹)</th><th>Paid (₹)</th><th>Remaining (₹)</th><th>Due Date</th></tr>
                 </thead>
                 <tbody>
                     {% for r in pending_records %}
@@ -96,12 +121,17 @@
                         <td>{{ r.due_date|date:"Y-m-d" }}</td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="5" class="empty-row">No pending fees for this student</td></tr>
+                    <tr id="noPendingRow">
+                        <td colspan="5" class="empty-row">
+                            No pending fees for this student.
+                            <button type="button" class="btn-generate" id="generateSingleBtn">Generate Current Month Fee</button>
+                        </td>
+                    </tr>
                     {% endfor %}
                     {% if pending_records %}
                     <tr class="total-row">
                         <td colspan="3"><strong>Total Pending</strong></td>
-                        <td colspan="2"><strong>₹{{ total_pending }}</strong></td>
+                        <td colspan="2"><strong>₹<span id="totalPending">{{ total_pending }}</span></strong></td>
                     </tr>
                     {% endif %}
                 </tbody>
@@ -119,23 +149,14 @@
     </div>
     <div class="table-responsive">
         <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Receipt No</th>
-                    <th>Student</th>
-                    <th>Amount</th>
-                    <th>Date</th>
-                    <th>Mode</th>
-                    <th>Receipt</th>
-                </tr>
-            </thead>
+            <thead><tr><th>Receipt</th><th>Student</th><th>Amount</th><th>Date</th><th>Mode</th><th>Receipt</th></tr></thead>
             <tbody>
                 {% for p in recent_payments %}
                 <tr>
                     <td><code>{{ p.receipt_number }}</code></td>
-                    <td>{{ p.student.name }}</td>
-                    <td>₹{{ p.amount }}</td>
-                    <td>{{ p.payment_date|date:"Y-m-d" }}</td>
+                    <td>{{ p.student.name }} ({{ p.student.roll_number }})</td>
+                    <td class="amount">₹{{ p.amount|floatformat:2 }}</td>
+                    <td>{{ p.payment_date|date:"d M Y" }}</td>
                     <td>{{ p.get_payment_mode_display }}</td>
                     <td><a href="{% url 'fee_receipt' schema_name=tenant.schema_name receipt_id=p.id %}" class="receipt-link">View</a></td>
                 </tr>
@@ -148,303 +169,186 @@
 </div>
 
 <style>
-.page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1.5rem;
-    flex-wrap: wrap;
-    gap: 1rem;
-}
-.page-title {
-    font-size: 1.8rem;
-    font-weight: 700;
-    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    margin-bottom: 0.25rem;
-}
-.page-desc {
-    color: var(--muted);
-    font-size: 0.9rem;
-}
-.header-stats {
-    display: flex;
-    gap: 1rem;
-}
-.stat-badge {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    background: var(--surface-alt);
-    border-radius: 2rem;
-    font-size: 0.85rem;
-    font-weight: 500;
-    border: 1px solid var(--border);
-}
-.search-card {
-    background: var(--surface);
-    border-radius: var(--radius);
-    border: 1px solid var(--border);
-    padding: 1rem;
-    margin-bottom: 1.5rem;
-    box-shadow: var(--shadow-sm);
-}
-.search-input-group {
-    position: relative;
-}
-.search-icon {
-    position: absolute;
-    left: 0.75rem;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--muted);
-}
-.search-input {
-    width: 100%;
-    padding: 0.7rem 0.7rem 0.7rem 2.5rem;
-    border-radius: 2rem;
-    border: 1px solid var(--border);
-    background: var(--surface-alt);
-    color: var(--text);
-    font-size: 0.9rem;
-}
-.search-results {
-    margin-top: 0.75rem;
-    max-height: 300px;
-    overflow-y: auto;
-}
-.result-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.75rem;
-    border-bottom: 1px solid var(--border);
-    cursor: pointer;
-    transition: background 0.2s;
-}
-.result-item:hover {
-    background: var(--surface-alt);
-}
-.result-name {
-    font-weight: 600;
-}
-.result-roll {
-    font-size: 0.8rem;
-    color: var(--muted);
-    font-family: monospace;
-}
-.result-select {
-    background: var(--primary);
-    color: white;
-    padding: 0.25rem 0.75rem;
-    border-radius: 2rem;
-    font-size: 0.75rem;
-}
-.student-panel {
-    background: var(--surface);
-    border-radius: var(--radius);
-    border: 1px solid var(--border);
-    margin-bottom: 1.5rem;
-    overflow: hidden;
-}
-.student-info {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 1rem 1.5rem;
-    background: var(--surface-alt);
-    border-bottom: 1px solid var(--border);
-    flex-wrap: wrap;
-}
-.student-avatar {
-    width: 48px;
-    height: 48px;
-    background: var(--primary);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-}
-.student-info h3 {
-    font-size: 1.2rem;
-}
-.roll {
-    font-size: 0.9rem;
-    color: var(--muted);
-    font-weight: normal;
-}
-.class-info {
-    font-size: 0.85rem;
-    color: var(--muted);
-}
-.pending-badge {
-    margin-left: auto;
-    background: var(--danger);
-    color: white;
-    padding: 0.25rem 0.75rem;
-    border-radius: 2rem;
-    font-weight: 600;
-}
-.payment-form {
-    padding: 1.5rem;
-}
-.form-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-}
-.form-field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-}
-.form-field label {
-    font-weight: 600;
-    font-size: 0.8rem;
-}
-.form-field input, .form-field select, .form-field textarea {
-    padding: 0.6rem;
-    border-radius: 0.5rem;
-    border: 1px solid var(--border);
-    background: var(--surface-alt);
-    color: var(--text);
-}
-.submit-field {
-    justify-content: flex-end;
-    display: flex;
-    flex-direction: column;
-}
-.btn-primary {
-    background: var(--primary);
-    color: white;
-    padding: 0.6rem 1rem;
-    border-radius: 2rem;
-    border: none;
-    font-weight: 600;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    justify-content: center;
-}
-.btn-primary:hover {
-    background: var(--primary-dark);
-}
-.pending-table, .history-card {
-    padding: 0 1.5rem 1.5rem 1.5rem;
-}
-.history-card {
-    background: var(--surface);
-    border-radius: var(--radius);
-    border: 1px solid var(--border);
-    padding: 1.5rem;
-    margin-top: 1.5rem;
-}
-.card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-}
-.card-header h3 {
-    font-size: 1.2rem;
-}
-.view-all {
-    color: var(--primary);
-    text-decoration: none;
-    font-size: 0.85rem;
-}
-.table-responsive {
-    overflow-x: auto;
-}
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-.data-table th, .data-table td {
-    padding: 0.75rem;
-    text-align: left;
-    border-bottom: 1px solid var(--border);
-}
-.data-table th {
-    background: var(--surface-alt);
-    font-weight: 600;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    color: var(--muted);
-}
-.remaining {
-    font-weight: 700;
-    color: var(--danger);
-}
-.total-row {
-    background: var(--surface-alt);
-    font-weight: 600;
-}
-.receipt-link {
-    color: var(--primary);
-    text-decoration: none;
-}
-.empty-row {
-    text-align: center;
-    padding: 2rem;
-    color: var(--muted);
-}
+.header-stats { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+.stat-badge { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: var(--surface-alt); border-radius: 2rem; font-size: 0.85rem; font-weight: 500; border: 1px solid var(--border); }
+.card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
+.card-header h3 { flex: 1; font-size: 1.1rem; font-weight: 600; }
+.search-form { display: flex; gap: 0.75rem; margin-bottom: 0.5rem; }
+.search-input { flex: 1; padding: 0.6rem 1rem; border-radius: 2rem; border: 1px solid var(--border); background: var(--surface-alt); }
+.search-small { padding: 0.3rem 0.6rem; border-radius: 1rem; border: 1px solid var(--border); background: var(--surface-alt); width: 180px; }
+.student-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); transition: background 0.2s; cursor: pointer; }
+.student-item:hover { background: var(--surface-alt); }
+.student-info { flex: 2; }
+.student-info strong { display: block; }
+.roll, .class { font-size: 0.7rem; color: var(--muted); }
+.pending-amount { font-weight: 700; color: var(--danger); margin: 0 1rem; }
+.select-student-btn { background: var(--primary); color: white; border: none; border-radius: 1rem; padding: 0.25rem 0.75rem; cursor: pointer; }
+.student-panel { margin-top: 0; }
+.student-info { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; background: var(--surface-alt); padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem; }
+.student-avatar { width: 48px; height: 48px; background: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; }
+.pending-badge { background: var(--danger); color: white; padding: 0.25rem 0.75rem; border-radius: 2rem; font-weight: 600; }
+.payment-form { padding: 1rem; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+.form-field { display: flex; flex-direction: column; gap: 0.25rem; }
+.form-field label { font-weight: 600; font-size: 0.8rem; }
+.form-field input, .form-field select { padding: 0.6rem; border-radius: 0.5rem; border: 1px solid var(--border); background: var(--surface-alt); }
+.submit-field { justify-content: flex-end; display: flex; flex-direction: column; }
+.pending-table, .history-card { margin-top: 1rem; }
+.total-row { background: var(--surface-alt); font-weight: 600; }
+.remaining { font-weight: 700; color: var(--danger); }
+.btn-generate { background: var(--primary); color: white; border: none; border-radius: 2rem; padding: 0.3rem 0.8rem; margin-top: 0.5rem; cursor: pointer; }
+.search-result { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.5rem; }
+.result-item { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; border-bottom: 1px solid var(--border); cursor: pointer; }
+.result-item:hover { background: var(--surface-alt); }
+.empty-row { text-align: center; padding: 1rem; color: var(--muted); }
 </style>
 
 <script>
-    const searchInput = document.getElementById('studentSearch');
-    const resultsDiv = document.getElementById('searchResults');
-
-    function debounce(func, delay) {
-        let timer;
-        return function() {
-            clearTimeout(timer);
-            timer = setTimeout(() => func.apply(this, arguments), delay);
-        };
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || getCookie('csrftoken');
+    function getCookie(name) {
+        let value = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    value = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return value;
     }
 
-    const searchStudents = debounce(async function() {
+    function loadStudent(studentId) {
+        window.location.href = `{% url 'fee_collection' schema_name=tenant.schema_name %}?student_id=${studentId}`;
+    }
+
+    // Attach click to "Select" buttons inside pending list
+    document.querySelectorAll('.select-student-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = btn.getAttribute('data-id');
+            if (id) loadStudent(id);
+        });
+    });
+    document.querySelectorAll('.student-item').forEach(item => {
+        const btn = item.querySelector('.select-student-btn');
+        if (btn) {
+            item.addEventListener('click', (e) => {
+                if (e.target !== btn) btn.click();
+            });
+        }
+    });
+
+    // Filter pending list
+    const pendingSearch = document.getElementById('pendingSearch');
+    if (pendingSearch) {
+        pendingSearch.addEventListener('input', function() {
+            const filter = this.value.toLowerCase();
+            document.querySelectorAll('.student-item').forEach(item => {
+                const text = item.innerText.toLowerCase();
+                item.style.display = text.includes(filter) ? '' : 'none';
+            });
+        });
+    }
+
+    // Manual search by roll/name/cnic
+    const searchInput = document.getElementById('studentSearchInput');
+    const searchBtn = document.getElementById('searchStudentBtn');
+    const searchResultDiv = document.getElementById('searchResult');
+    async function performSearch() {
         const q = searchInput.value.trim();
         if (q.length < 2) {
-            resultsDiv.innerHTML = '';
+            searchResultDiv.style.display = 'none';
             return;
         }
         try {
             const resp = await fetch(`/portal/{{ tenant.schema_name }}/api/student-search/?q=${encodeURIComponent(q)}`);
             const data = await resp.json();
             if (data.length === 0) {
-                resultsDiv.innerHTML = '<div class="result-item">No students found</div>';
+                searchResultDiv.innerHTML = '<div class="result-item">No student found</div>';
+                searchResultDiv.style.display = 'block';
                 return;
             }
             let html = '';
             data.forEach(s => {
-                html += `
-                    <div class="result-item" data-id="${s.id}">
-                        <div>
-                            <div class="result-name">${s.name}</div>
-                            <div class="result-roll">${s.roll_no} | ${s.grade}</div>
-                        </div>
-                        <div class="result-select">Select →</div>
-                    </div>
-                `;
+                html += `<div class="result-item" data-id="${s.id}">
+                            <div><strong>${s.name}</strong><br><small>${s.roll_no} | ${s.grade}</small></div>
+                            <button class="select-student-btn">Select</button>
+                         </div>`;
             });
-            resultsDiv.innerHTML = html;
-            document.querySelectorAll('.result-item').forEach(el => {
-                el.addEventListener('click', () => {
-                    const studentId = el.dataset.id;
-                    window.location.href = `{% url 'fee_collection' schema_name=tenant.schema_name %}?student_id=${studentId}`;
-                });
+            searchResultDiv.innerHTML = html;
+            searchResultDiv.style.display = 'block';
+            document.querySelectorAll('#searchResult .result-item').forEach(el => {
+                const btn = el.querySelector('.select-student-btn');
+                const id = el.getAttribute('data-id');
+                if (btn) {
+                    btn.addEventListener('click', () => loadStudent(id));
+                    el.addEventListener('click', (e) => {
+                        if (e.target !== btn) btn.click();
+                    });
+                }
             });
         } catch(e) {
             console.error(e);
+            searchResultDiv.innerHTML = '<div class="result-item">Error searching</div>';
+            searchResultDiv.style.display = 'block';
         }
-    }, 300);
+    }
+    searchBtn.addEventListener('click', performSearch);
+    searchInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') performSearch(); });
 
-    searchInput.addEventListener('input', searchStudents);
+    // Live remaining amount calculation
+    const amountInput = document.getElementById('amountInput');
+    const remainingSpan = document.getElementById('remainingAfter');
+    const totalPendingSpan = document.getElementById('totalPending');
+    if (amountInput && totalPendingSpan) {
+        const total = parseFloat(totalPendingSpan.innerText);
+        amountInput.addEventListener('input', function() {
+            const paid = parseFloat(this.value) || 0;
+            remainingSpan.value = (total - paid) > 0 ? `₹${(total - paid).toFixed(2)}` : '₹0.00';
+        });
+        amountInput.dispatchEvent(new Event('input'));
+    }
+
+    // Generate all fees
+    document.getElementById('generateAllBtn')?.addEventListener('click', async () => {
+        if (!confirm('Generate fee records for current month for all active students?')) return;
+        const btn = document.getElementById('generateAllBtn');
+        btn.disabled = true;
+        btn.innerHTML = 'Generating...';
+        try {
+            const resp = await fetch('/api/manual-generate/', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+            });
+            const data = await resp.json();
+            alert(data.message);
+            location.reload();
+        } catch(e) { alert('Error generating fees'); }
+        finally { btn.disabled = false; btn.innerHTML = 'Generate All Fees'; }
+    });
+
+    // Generate single fee for current month
+    const generateSingleBtn = document.getElementById('generateSingleBtn');
+    if (generateSingleBtn) {
+        generateSingleBtn.addEventListener('click', async () => {
+            const studentId = {{ selected_student.id }};
+            if (!confirm(`Generate current month fee for {{ selected_student.name }}?`)) return;
+            generateSingleBtn.disabled = true;
+            generateSingleBtn.innerHTML = 'Generating...';
+            try {
+                const resp = await fetch(`/api/manual-generate-single/?student_id=${studentId}`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken },
+                });
+                const data = await resp.json();
+                alert(data.message);
+                location.reload();
+            } catch(e) { alert('Error generating fee'); }
+            finally { generateSingleBtn.disabled = false; generateSingleBtn.innerHTML = 'Generate Current Month Fee'; }
+        });
+    }
 </script>
 {% endblock %}
