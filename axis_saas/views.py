@@ -15,7 +15,6 @@ from django.views.decorators.http import require_http_methods
 from .models import SchoolClient, Student, FeeStructure, FeeRecord, PaymentTransaction, SchoolFeeSettings
 from .forms import StudentForm, FeeCollectionForm, FeeSettingsForm, FeeStructureForm, FamilyPaymentForm
 
-# ------------------- Helper -------------------
 def get_tenant(request, schema_name):
     return get_object_or_404(SchoolClient, schema_name=schema_name)
 
@@ -25,22 +24,18 @@ def dashboard(request, schema_name):
     with schema_context(schema_name):
         today = date.today()
         first_day_month = today.replace(day=1)
-        
         today_collection = PaymentTransaction.objects.filter(payment_date=today).aggregate(Sum('amount'))['amount__sum'] or 0
         month_collection = PaymentTransaction.objects.filter(payment_date__gte=first_day_month).aggregate(Sum('amount'))['amount__sum'] or 0
-        
         pending_records = FeeRecord.objects.filter(status__in=['pending', 'partial', 'overdue'])
         total_pending = sum(r.remaining for r in pending_records)
         defaulters_count = Student.objects.filter(fee_records__status__in=['pending', 'partial', 'overdue']).distinct().count()
         recent_payments = PaymentTransaction.objects.select_related('student').order_by('-payment_date')[:10]
-        
         top_defaulters = []
         for student in Student.objects.all():
             pending = sum(fr.remaining for fr in student.fee_records.filter(status__in=['pending', 'partial', 'overdue']))
             if pending > 0:
                 top_defaulters.append({'student': student, 'pending': pending})
         top_defaulters = sorted(top_defaulters, key=lambda x: x['pending'], reverse=True)[:5]
-        
         months_labels = []
         months_amounts = []
         for i in range(5, -1, -1):
@@ -52,20 +47,13 @@ def dashboard(request, schema_name):
             total = PaymentTransaction.objects.filter(payment_date__year=y, payment_date__month=m).aggregate(Sum('amount'))['amount__sum'] or 0
             months_labels.append(f"{m}/{y}")
             months_amounts.append(float(total))
-    
     context = {
-        'tenant': tenant,
-        'today_collection': today_collection,
-        'month_collection': month_collection,
-        'total_pending': total_pending,
-        'defaulters_count': defaulters_count,
-        'recent_payments': recent_payments,
-        'top_defaulters': top_defaulters,
-        'months_labels': months_labels,
-        'months_amounts': months_amounts,
+        'tenant': tenant, 'today_collection': today_collection, 'month_collection': month_collection,
+        'total_pending': total_pending, 'defaulters_count': defaulters_count,
+        'recent_payments': recent_payments, 'top_defaulters': top_defaulters,
+        'months_labels': months_labels, 'months_amounts': months_amounts,
         'logo_url': tenant.school_logo.url if tenant.school_logo else None,
-        'today': today,
-        'start_date': first_day_month,
+        'today': today, 'start_date': first_day_month,
     }
     return render(request, 'tenant/dashboard.html', context)
 
@@ -76,7 +64,6 @@ def student_list(request, schema_name):
     grade = request.GET.get('grade', '')
     section = request.GET.get('section', '')
     status = request.GET.get('status', '')
-    
     with schema_context(schema_name):
         students = Student.objects.all()
         if query:
@@ -88,22 +75,15 @@ def student_list(request, schema_name):
         if grade: students = students.filter(grade=grade)
         if section: students = students.filter(section=section)
         if status: students = students.filter(status=status)
-        
         students = students.order_by('-enrolled_on')
         for s in students:
             s.pending_amount = sum(fr.remaining for fr in s.fee_records.filter(status__in=['pending', 'partial', 'overdue']))
-        
         grades = Student.objects.values_list('grade', flat=True).distinct().order_by('grade')
         sections = Student.objects.values_list('section', flat=True).distinct().order_by('section')
         status_choices = Student.STATUS_CHOICES
-    
     context = {
-        'tenant': tenant,
-        'students': students,
-        'grades': grades,
-        'sections': sections,
-        'status_choices': status_choices,
-        'search_query': query,
+        'tenant': tenant, 'students': students, 'grades': grades, 'sections': sections,
+        'status_choices': status_choices, 'search_query': query,
         'logo_url': tenant.school_logo.url if tenant.school_logo else None,
     }
     return render(request, 'tenant/student_list.html', context)
@@ -117,15 +97,9 @@ def student_profile(request, schema_name, student_id):
         payments = student.payments.all().order_by('-payment_date')
         total_fee = fee_records.aggregate(Sum('amount'))['amount__sum'] or 0
         total_paid = payments.aggregate(Sum('amount'))['amount__sum'] or 0
-    
     context = {
-        'tenant': tenant,
-        'student': student,
-        'fee_records': fee_records,
-        'payments': payments,
-        'total_fee': total_fee,
-        'total_paid': total_paid,
-        'pending_total': total_fee - total_paid,
+        'tenant': tenant, 'student': student, 'fee_records': fee_records, 'payments': payments,
+        'total_fee': total_fee, 'total_paid': total_paid, 'pending_total': total_fee - total_paid,
         'logo_url': tenant.school_logo.url if tenant.school_logo else None,
     }
     return render(request, 'tenant/student_profile.html', context)
@@ -138,37 +112,28 @@ def fee_collection(request, schema_name, student_id=None):
         today_collection = PaymentTransaction.objects.filter(payment_date=today).aggregate(Sum('amount'))['amount__sum'] or 0
         recent_payments = PaymentTransaction.objects.select_related('student').order_by('-payment_date')[:10]
         total_pending_all = sum(fr.remaining for fr in FeeRecord.objects.filter(status__in=['pending', 'partial', 'overdue']))
-        
         pending_students = []
         for student in Student.objects.filter(status='active'):
             pending = sum(fr.remaining for fr in student.fee_records.filter(status__in=['pending', 'partial', 'overdue']))
             if pending > 0:
                 pending_students.append({
-                    'id': student.id,
-                    'name': student.name,
-                    'roll_number': student.roll_number,
-                    'grade': student.grade,
-                    'section': student.section,
-                    'pending_total': pending
+                    'id': student.id, 'name': student.name, 'roll_number': student.roll_number,
+                    'grade': student.grade, 'section': student.section, 'pending_total': pending
                 })
         pending_students.sort(key=lambda x: x['pending_total'], reverse=True)
-        
         if request.method == 'POST':
             student_id_post = request.POST.get('student_id')
             amount = Decimal(request.POST.get('amount', '0'))
             payment_mode = request.POST.get('payment_mode')
             remarks = request.POST.get('remarks', '')
-            
             if not student_id_post or amount <= 0:
                 messages.error(request, "Invalid payment data.")
                 return redirect('fee_collection', schema_name=schema_name)
-            
             student = get_object_or_404(Student, id=student_id_post)
             pending_records = student.fee_records.filter(status__in=['pending', 'partial', 'overdue']).order_by('due_date')
             if not pending_records:
                 messages.error(request, f"No pending fee for {student.name}.")
                 return redirect('fee_collection', schema_name=schema_name)
-            
             remaining = amount
             updated_records = []
             for record in pending_records:
@@ -183,38 +148,30 @@ def fee_collection(request, schema_name, student_id=None):
                     remaining = 0
                 record.save()
                 updated_records.append(record)
-            
             payment_type = 'full' if remaining == 0 else 'partial'
             payment = PaymentTransaction.objects.create(
-                student=student,
-                amount=amount,
-                payment_mode=payment_mode,
-                payment_type=payment_type,
-                remarks=remarks,
+                student=student, amount=amount, payment_mode=payment_mode,
+                payment_type=payment_type, remarks=remarks,
                 created_by=request.session.get('school_admin_username', 'admin')
             )
             payment.fee_records.set(updated_records)
             messages.success(request, f"₹{amount} received from {student.name}. Receipt: {payment.receipt_number}")
             return redirect('fee_receipt', schema_name=schema_name, receipt_id=payment.id)
-        
+        if not student_id:
+            student_id = request.GET.get('student_id')
         selected_student = None
         pending_list = []
         if student_id:
             selected_student = get_object_or_404(Student, id=student_id)
             pending_list = selected_student.fee_records.filter(status__in=['pending', 'partial', 'overdue']).order_by('due_date')
-        
         context = {
-            'tenant': tenant,
-            'selected_student': selected_student,
-            'pending_records': pending_list,
-            'total_pending': sum(r.remaining for r in pending_list),
-            'today_collection': today_collection,
-            'recent_payments': recent_payments,
-            'total_pending_all': total_pending_all,
+            'tenant': tenant, 'selected_student': selected_student, 'pending_records': pending_list,
+            'total_pending': sum(r.remaining for r in pending_list), 'today_collection': today_collection,
+            'recent_payments': recent_payments, 'total_pending_all': total_pending_all,
             'pending_students': pending_students,
             'logo_url': tenant.school_logo.url if tenant.school_logo else None,
         }
-        return render(request, 'tenant/fee_collection.html', context)
+    return render(request, 'tenant/fee_collection.html', context)
 
 # ------------------- Receipt -------------------
 def fee_receipt(request, schema_name, receipt_id):
@@ -222,49 +179,36 @@ def fee_receipt(request, schema_name, receipt_id):
     with schema_context(schema_name):
         payment = get_object_or_404(PaymentTransaction, id=receipt_id)
         context = {
-            'tenant': tenant,
-            'payment': payment,
-            'fee_records': payment.fee_records.all(),
+            'tenant': tenant, 'payment': payment, 'fee_records': payment.fee_records.all(),
             'logo_url': tenant.school_logo.url if tenant.school_logo else None,
         }
-        return render(request, 'tenant/receipt.html', context)
+    return render(request, 'tenant/receipt.html', context)
 
 # ------------------- Defaulters -------------------
 def defaulters(request, schema_name):
     tenant = get_tenant(request, schema_name)
-    days = request.GET.get('days', '30')
+    days = request.GET.get('days', '0')
     try:
         days = int(days)
     except:
-        days = 30
-    if days > 3650:
-        days = 3650
-    
+        days = 0
+    if days < 0: days = 0
     with schema_context(schema_name):
         today = date.today()
-        cutoff = today - timedelta(days=days)
-        defaulters_list = Student.objects.filter(
-            fee_records__status__in=['pending', 'partial', 'overdue'],
-            fee_records__due_date__lte=cutoff
-        ).distinct()
-        
+        cutoff = today - timedelta(days=days) if days > 0 else None
+        base_qs = Student.objects.filter(fee_records__status__in=['pending', 'partial', 'overdue']).distinct()
+        if cutoff:
+            base_qs = base_qs.filter(fee_records__due_date__lte=cutoff)
         result = []
-        for student in defaulters_list:
+        for student in base_qs:
             pending_fee = sum(fr.remaining for fr in student.fee_records.filter(status__in=['pending', 'partial', 'overdue']))
             oldest_due = student.fee_records.filter(status__in=['pending', 'partial', 'overdue']).order_by('due_date').first()
-            result.append({
-                'student': student,
-                'pending_amount': pending_fee,
-                'days_overdue': (today - oldest_due.due_date).days if oldest_due else 0
-            })
+            days_overdue = (today - oldest_due.due_date).days if oldest_due and oldest_due.due_date < today else 0
+            result.append({'student': student, 'pending_amount': pending_fee, 'days_overdue': days_overdue})
         result.sort(key=lambda x: x['days_overdue'], reverse=True)
         total_pending_all = sum(fr.remaining for fr in FeeRecord.objects.filter(status__in=['pending', 'partial', 'overdue']))
-    
     context = {
-        'tenant': tenant,
-        'defaulters': result,
-        'days': days,
-        'total_pending_all': total_pending_all,
+        'tenant': tenant, 'defaulters': result, 'days': days, 'total_pending_all': total_pending_all,
         'logo_url': tenant.school_logo.url if tenant.school_logo else None,
     }
     return render(request, 'tenant/defaulters.html', context)
@@ -273,27 +217,66 @@ def defaulters(request, schema_name):
 def reports(request, schema_name):
     tenant = get_tenant(request, schema_name)
     report_type = request.GET.get('type', 'collection')
+    today = date.today()
+    quick_filter = request.GET.get('quick_filter')
     start_date_str = request.GET.get('start_date')
     end_date_str = request.GET.get('end_date')
-    if start_date_str and end_date_str:
-        start_date = date.fromisoformat(start_date_str)
-        end_date = date.fromisoformat(end_date_str)
-    else:
-        end_date = date.today()
-        start_date = end_date.replace(day=1)
-    
+    search_q = request.GET.get('search', '').strip()
     with schema_context(schema_name):
-        payments_in_range = PaymentTransaction.objects.filter(payment_date__range=[start_date, end_date])
-        total_collection = payments_in_range.aggregate(Sum('amount'))['amount__sum'] or Decimal('0')
+        total_payments_all = PaymentTransaction.objects.aggregate(Sum('amount'))['amount__sum'] or Decimal('0')
+    if quick_filter == 'today':
+        start_date = end_date = today
+    elif quick_filter == 'week':
+        start_date = today - timedelta(days=today.weekday())
+        end_date = start_date + timedelta(days=6)
+    elif quick_filter == 'month':
+        start_date = today.replace(day=1)
+        end_date = today
+    elif quick_filter == 'year':
+        start_date = today.replace(month=1, day=1)
+        end_date = today
+    elif quick_filter == 'all':
+        start_date = date(2000, 1, 1)
+        end_date = today
+    elif quick_filter == 'last6months':
+        start_date = today - timedelta(days=180)
+        end_date = today
+    elif start_date_str and end_date_str:
+        try:
+            start_date = date.fromisoformat(start_date_str)
+            end_date = date.fromisoformat(end_date_str)
+            if start_date > end_date:
+                start_date, end_date = end_date, start_date
+            quick_filter = 'custom'
+        except:
+            start_date = today - timedelta(days=180)
+            end_date = today
+            quick_filter = 'last6months'
+    else:
+        if total_payments_all > 0:
+            start_date = date(2000, 1, 1)
+            end_date = today
+            quick_filter = 'all'
+        else:
+            start_date = today - timedelta(days=180)
+            end_date = today
+            quick_filter = 'last6months'
+    with schema_context(schema_name):
+        payments_qs = PaymentTransaction.objects.filter(payment_date__gte=start_date, payment_date__lte=end_date)
+        if search_q:
+            payments_qs = payments_qs.filter(
+                Q(receipt_number__icontains=search_q) | Q(student__name__icontains=search_q) |
+                Q(student__roll_number__icontains=search_q)
+            )
+        total_collection = payments_qs.aggregate(Sum('amount'))['amount__sum'] or Decimal('0')
+        payment_count = payments_qs.count()
         pending_records = FeeRecord.objects.filter(status__in=['pending', 'partial', 'overdue'])
         total_pending = sum(r.remaining for r in pending_records)
         total_collection_all = PaymentTransaction.objects.aggregate(Sum('amount'))['amount__sum'] or Decimal('0')
         total_billed = total_collection_all + total_pending
         collection_rate = (float(total_collection_all) / float(total_billed) * 100) if total_billed > 0 else 0
         defaulters_count = Student.objects.filter(fee_records__status__in=['pending', 'partial', 'overdue']).distinct().count()
-        
         monthly_data = []
-        today = date.today()
         for i in range(5, -1, -1):
             m = today.month - i
             y = today.year
@@ -302,65 +285,45 @@ def reports(request, schema_name):
                 y -= 1
             total = PaymentTransaction.objects.filter(payment_date__year=y, payment_date__month=m).aggregate(Sum('amount'))['amount__sum'] or 0
             monthly_data.append({'month': f"{m}/{y}", 'amount': float(total)})
-        
         mode_distribution = []
         mode_totals = {}
         for mode_code, mode_name in PaymentTransaction.PAYMENT_MODE_CHOICES:
-            total = payments_in_range.filter(payment_mode=mode_code).aggregate(Sum('amount'))['amount__sum'] or Decimal('0')
+            total = payments_qs.filter(payment_mode=mode_code).aggregate(Sum('amount'))['amount__sum'] or Decimal('0')
             if total > 0:
                 mode_totals[mode_name] = float(total)
         mode_distribution = [{'name': k, 'amount': v} for k, v in mode_totals.items()]
-        
         class_pending = []
         grades = Student.objects.values_list('grade', flat=True).distinct().order_by('grade')
         for grade in grades:
             students = Student.objects.filter(grade=grade)
-            pending = sum(
-                sum(fr.remaining for fr in s.fee_records.filter(status__in=['pending', 'partial', 'overdue']))
-                for s in students
-            )
+            pending = sum(sum(fr.remaining for fr in s.fee_records.filter(status__in=['pending', 'partial', 'overdue'])) for s in students)
             if pending > 0:
                 class_pending.append({'grade': grade, 'pending': float(pending)})
         class_pending.sort(key=lambda x: x['pending'], reverse=True)
-        
         top_defaulters = []
         for student in Student.objects.all():
             pending = sum(fr.remaining for fr in student.fee_records.filter(status__in=['pending', 'partial', 'overdue']))
             if pending > 0:
                 top_defaulters.append({'student': student, 'pending': float(pending)})
         top_defaulters = sorted(top_defaulters, key=lambda x: x['pending'], reverse=True)[:5]
-        
-        defaulters_list = Student.objects.filter(
-            fee_records__status__in=['pending', 'partial', 'overdue']
-        ).distinct()
+        defaulters_list = Student.objects.filter(fee_records__status__in=['pending', 'partial', 'overdue']).distinct()
         defaulters_data = []
         for student in defaulters_list:
             pending = sum(fr.remaining for fr in student.fee_records.filter(status__in=['pending', 'partial', 'overdue']))
             oldest_due = student.fee_records.filter(status__in=['pending', 'partial', 'overdue']).order_by('due_date').first()
             defaulters_data.append({
-                'student': student,
-                'pending_amount': pending,
+                'student': student, 'pending_amount': pending,
                 'days_overdue': (date.today() - oldest_due.due_date).days if oldest_due else 0
             })
         defaulters_data.sort(key=lambda x: x['days_overdue'], reverse=True)
-        
         context = {
-            'tenant': tenant,
-            'report_type': report_type,
-            'start_date': start_date,
-            'end_date': end_date,
-            'total_collection': total_collection,
-            'total_pending': total_pending,
-            'collection_rate': round(collection_rate, 1),
-            'defaulters_count': defaulters_count,
-            'monthly_data': monthly_data,
-            'mode_distribution': mode_distribution,
-            'class_pending': class_pending,
-            'top_defaulters': top_defaulters,
-            'defaulters_data': defaulters_data,
-            'payments': payments_in_range.order_by('-payment_date'),
-            'total': total_collection,
-            'logo_url': tenant.school_logo.url if tenant.school_logo else None,
+            'tenant': tenant, 'report_type': report_type, 'start_date': start_date, 'end_date': end_date,
+            'quick_filter': quick_filter, 'search_query': search_q, 'total_collection': total_collection,
+            'total_pending': total_pending, 'collection_rate': round(collection_rate, 1), 'defaulters_count': defaulters_count,
+            'monthly_data': monthly_data, 'mode_distribution': mode_distribution, 'class_pending': class_pending,
+            'top_defaulters': top_defaulters, 'defaulters_data': defaulters_data, 'payments': payments_qs.order_by('-payment_date'),
+            'total': total_collection, 'payment_count': payment_count, 'logo_url': tenant.school_logo.url if tenant.school_logo else None,
+            'total_collection_all': total_collection_all,
         }
     return render(request, 'tenant/reports.html', context)
 
@@ -387,10 +350,7 @@ def settings(request, schema_name):
         tenant.save()
         messages.success(request, "Settings updated successfully.")
         return redirect('settings', schema_name=schema_name)
-    context = {
-        'tenant': tenant,
-        'logo_url': tenant.school_logo.url if tenant.school_logo else None,
-    }
+    context = {'tenant': tenant, 'logo_url': tenant.school_logo.url if tenant.school_logo else None}
     return render(request, 'tenant/settings.html', context)
 
 # ------------------- Fee Structure -------------------
@@ -401,10 +361,7 @@ def fee_structure(request, schema_name):
         if request.method == 'POST':
             grade = request.POST.get('grade')
             monthly_fee = request.POST.get('monthly_fee')
-            obj, created = FeeStructure.objects.update_or_create(
-                grade=grade,
-                defaults={'monthly_fee': monthly_fee}
-            )
+            obj, created = FeeStructure.objects.update_or_create(grade=grade, defaults={'monthly_fee': monthly_fee})
             Student.objects.filter(grade=grade).update(custom_fee=monthly_fee)
             messages.success(request, f"Fee structure for {grade} saved.")
             return redirect('fee_structure', schema_name=schema_name)
@@ -417,10 +374,7 @@ def fee_structure(request, schema_name):
             except FeeStructure.DoesNotExist:
                 pass
     context = {
-        'tenant': tenant,
-        'form': form,
-        'fee_structures': structures,
-        'edit_grade': edit_grade,
+        'tenant': tenant, 'form': form, 'fee_structures': structures, 'edit_grade': edit_grade,
         'logo_url': tenant.school_logo.url if tenant.school_logo else None,
     }
     return render(request, 'tenant/fee_structure.html', context)
@@ -438,11 +392,7 @@ def fee_settings(request, schema_name):
                 return redirect('fee_settings', schema_name=schema_name)
         else:
             form = FeeSettingsForm(instance=settings_obj)
-    context = {
-        'tenant': tenant,
-        'form': form,
-        'logo_url': tenant.school_logo.url if tenant.school_logo else None,
-    }
+    context = {'tenant': tenant, 'form': form, 'logo_url': tenant.school_logo.url if tenant.school_logo else None}
     return render(request, 'tenant/fee_settings.html', context)
 
 # ------------------- Family Payment -------------------
@@ -489,23 +439,16 @@ def family_payment(request, schema_name):
                     student_paid = [r for r in paid_records if r.student == student]
                     if student_paid:
                         payment = PaymentTransaction.objects.create(
-                            student=student,
-                            amount=sum(r.paid_amount for r in student_paid),
-                            payment_mode=mode,
-                            payment_type='full' if remaining == 0 else 'partial',
-                            remarks=remarks,
-                            created_by=request.session.get('school_admin_username', 'admin')
+                            student=student, amount=sum(r.paid_amount for r in student_paid),
+                            payment_mode=mode, payment_type='full' if remaining == 0 else 'partial',
+                            remarks=remarks, created_by=request.session.get('school_admin_username', 'admin')
                         )
                         payment.fee_records.set(student_paid)
                 messages.success(request, f"Family payment of ₹{amount} processed for CNIC {cnic}")
                 return redirect('reports', schema_name=schema_name)
         else:
             form = FamilyPaymentForm()
-    context = {
-        'tenant': tenant,
-        'form': form,
-        'logo_url': tenant.school_logo.url if tenant.school_logo else None,
-    }
+    context = {'tenant': tenant, 'form': form, 'logo_url': tenant.school_logo.url if tenant.school_logo else None}
     return render(request, 'tenant/family_payment.html', context)
 
 # ------------------- API: Student Search -------------------
@@ -531,7 +474,6 @@ def fee_status_api(request):
         tenant = SchoolClient.objects.get(schema_name=schema_name)
     except SchoolClient.DoesNotExist:
         return JsonResponse({'error': 'Tenant not found'}, status=404)
-    
     with schema_context(schema_name):
         settings, _ = SchoolFeeSettings.objects.get_or_create(pk=1)
         last_record = FeeRecord.objects.order_by('-year', '-month').first()
@@ -545,12 +487,7 @@ def fee_status_api(request):
             next_month = today.month + 1 if today.month < 12 else 1
             next_year = today.year + 1 if today.month == 12 else today.year
             next_date = date(next_year, next_month, min(gen_day, monthrange(next_year, next_month)[1]))
-        
-        return JsonResponse({
-            'last_generation': last_gen, 
-            'next_generation': next_date.strftime('%Y-%m-%d'), 
-            'status': 'success'
-        })
+        return JsonResponse({'last_generation': last_gen, 'next_generation': next_date.strftime('%Y-%m-%d'), 'status': 'success'})
 
 # ------------------- API: Manual Generate -------------------
 @csrf_exempt
@@ -565,30 +502,28 @@ def manual_generate_api(request):
         tenant = SchoolClient.objects.get(schema_name=schema_name)
     except SchoolClient.DoesNotExist:
         return JsonResponse({'error': 'Tenant not found'}, status=404)
-    
     with schema_context(schema_name):
         settings, _ = SchoolFeeSettings.objects.get_or_create(pk=1)
         today = date.today()
         month = today.month
         year = today.year
-        
-        # Check if already generated
         existing = FeeRecord.objects.filter(month=month, year=year)
         if existing.exists():
             return JsonResponse({'message': f'Fee records for {month}/{year} already exist. ({existing.count()} records)'})
-        
         students = Student.objects.filter(status='active')
+        if not students.exists():
+            return JsonResponse({'message': 'No active students found. Please add students first.'})
         due_date = today + timedelta(days=settings.due_date_offset)
         created = 0
-        errors = []
-        
+        skipped_no_fee = 0
         for student in students:
             base_fee = student.custom_fee if student.custom_fee > 0 else 0
             if base_fee == 0:
                 fee_struct = FeeStructure.objects.filter(grade=student.grade).first()
                 if fee_struct:
                     base_fee = fee_struct.monthly_fee
-            
+                    student.custom_fee = base_fee
+                    student.save(update_fields=['custom_fee'])
             if base_fee > 0:
                 obj, is_new = FeeRecord.objects.get_or_create(
                     student=student, month=month, year=year,
@@ -596,8 +531,12 @@ def manual_generate_api(request):
                 )
                 if is_new:
                     created += 1
-        
-        return JsonResponse({'message': f'Generated {created} fee records for {month}/{year}.', 'created': created})
+            else:
+                skipped_no_fee += 1
+        message = f'Generated {created} fee records for {month}/{year}.'
+        if skipped_no_fee > 0:
+            message += f' Skipped {skipped_no_fee} students because no fee structure defined for their grade.'
+        return JsonResponse({'message': message, 'created': created, 'skipped': skipped_no_fee})
 
 # ------------------- API: Manual Generate for Single Student -------------------
 @csrf_exempt
@@ -615,30 +554,26 @@ def manual_generate_single_api(request):
         tenant = SchoolClient.objects.get(schema_name=schema_name)
     except SchoolClient.DoesNotExist:
         return JsonResponse({'error': 'Tenant not found'}, status=404)
-    
     with schema_context(schema_name):
         try:
             student = Student.objects.get(id=student_id)
         except Student.DoesNotExist:
             return JsonResponse({'error': 'Student not found'}, status=404)
-        
         settings, _ = SchoolFeeSettings.objects.get_or_create(pk=1)
         today = date.today()
         month = today.month
         year = today.year
-        
         if FeeRecord.objects.filter(student=student, month=month, year=year).exists():
             return JsonResponse({'message': f'Fee already exists for {student.name} for {month}/{year}.'})
-        
         base_fee = student.custom_fee if student.custom_fee > 0 else 0
         if base_fee == 0:
             fee_struct = FeeStructure.objects.filter(grade=student.grade).first()
             if fee_struct:
                 base_fee = fee_struct.monthly_fee
-        
+                student.custom_fee = base_fee
+                student.save(update_fields=['custom_fee'])
         if base_fee <= 0:
             return JsonResponse({'error': 'No fee structure defined for this grade.'}, status=400)
-        
         due_date = today + timedelta(days=settings.due_date_offset)
         FeeRecord.objects.create(
             student=student, month=month, year=year,
@@ -654,6 +589,10 @@ def add_student(request, schema_name):
             form = StudentForm(request.POST)
             if form.is_valid():
                 student = form.save(commit=False)
+                if student.custom_fee == 0:
+                    fee_struct = FeeStructure.objects.filter(grade=student.grade).first()
+                    if fee_struct:
+                        student.custom_fee = fee_struct.monthly_fee
                 student.save()
                 messages.success(request, f"Student {student.name} added successfully. Roll No: {student.roll_number}")
                 return redirect('student_list', schema_name=schema_name)
@@ -661,12 +600,10 @@ def add_student(request, schema_name):
             form = StudentForm()
         grades = FeeStructure.objects.values_list('grade', flat=True).distinct()
         context = {
-            'tenant': tenant,
-            'form': form,
-            'grades': grades,
+            'tenant': tenant, 'form': form, 'grades': grades,
             'logo_url': tenant.school_logo.url if tenant.school_logo else None,
         }
-        return render(request, 'tenant/student_form.html', context)
+    return render(request, 'tenant/student_form.html', context)
 
 # ------------------- Edit Student -------------------
 def edit_student(request, schema_name, student_id):
@@ -683,10 +620,7 @@ def edit_student(request, schema_name, student_id):
             form = StudentForm(instance=student)
         grades = FeeStructure.objects.values_list('grade', flat=True).distinct()
         context = {
-            'tenant': tenant,
-            'form': form,
-            'student': student,
-            'grades': grades,
+            'tenant': tenant, 'form': form, 'student': student, 'grades': grades,
             'logo_url': tenant.school_logo.url if tenant.school_logo else None,
         }
-        return render(request, 'tenant/student_form.html', context)
+    return render(request, 'tenant/student_form.html', context)
