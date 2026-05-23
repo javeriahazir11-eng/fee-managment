@@ -1,526 +1,73 @@
 #!/bin/bash
 
-echo "═══════════════════════════════════════════════════════════════"
-echo "🔧 FINAL FIX: Fee Collection – Correct Payment Display"
-echo "═══════════════════════════════════════════════════════════════"
+# final_fix_all.sh – evaluate all querysets inside schema context
+# Run once from project root: ./final_fix_all.sh
 
-# Backup views.py
-cp axis_saas/views.py axis_saas/views.py.bak
+set -e
 
-# ------------------------------------------------------------------
-# 1. Patch the fee_collection view to fix recent_payments
-# ------------------------------------------------------------------
-cat > /tmp/patch_views.py << 'PYEOF'
+cd ~/axis_school_sys
+
+# Backup current views.py (again)
+cp axis_saas/views.py axis_saas/views.py.backup_before_final
+
+python3 << 'EOF'
 import re
 
-with open('axis_saas/views.py', 'r') as f:
-    content = f.read()
+file_path = "axis_saas/views.py"
+with open(file_path, "r") as f:
+    lines = f.readlines()
 
-# Find the fee_collection function and replace the recent_payments query part
-# We'll replace the lines that define recent_payments with a more robust version
-old_pattern = r'(recent_payments = PaymentTransaction\.objects\.select_related\(\'student\'\)\.order_by\(-\'payment_date\'\)\[:5\])'
-new_code = '''# Robust recent payments: if normal query fails, fallback to all payments ordered by id
-        try:
-            recent_payments = PaymentTransaction.objects.select_related('student').order_by('-payment_date')[:5]
-            if recent_payments.count() == 0 and PaymentTransaction.objects.count() > 0:
-                # Fallback: order by id (desc) to get latest
-                recent_payments = PaymentTransaction.objects.select_related('student').order_by('-id')[:5]
-        except Exception as e:
-            print(f"Recent payments error: {e}")
-            recent_payments = PaymentTransaction.objects.all().order_by('-id')[:5]'''
+new_lines = []
+i = 0
+while i < len(lines):
+    line = lines[i]
+    new_lines.append(line)
 
-# Replace the line
-new_content = re.sub(old_pattern, new_code, content)
+    # ---- student_list: convert grades and sections to lists ----
+    if "grades = Student.objects.values_list('grade', flat=True).distinct().order_by('grade')" in line:
+        indent = re.match(r'^(\s*)', line).group(1)
+        # Insert the conversion line right after
+        new_lines.append(f"{indent}grades = list(grades)  # force evaluation inside schema context\n")
+    if "sections = Student.objects.values_list('section', flat=True).distinct().order_by('section')" in line:
+        indent = re.match(r'^(\s*)', line).group(1)
+        new_lines.append(f"{indent}sections = list(sections)  # force evaluation inside schema context\n")
 
-# Also add an explicit debug print to see what's happening
-debug_line = "        print(f'DEBUG fee_collection: total_payments={PaymentTransaction.objects.count()}, recent_count={recent_payments.count()}')"
-# Insert after the recent_payments definition
-insert_pos = new_content.find("recent_payments = ")
-if insert_pos != -1:
-    # find the end of that line or block
-    end_of_line = new_content.find("\n", insert_pos)
-    if end_of_line != -1:
-        new_content = new_content[:end_of_line+1] + debug_line + new_content[end_of_line+1:]
+    # ---- fee_collection: convert grades and sections to lists ----
+    if "grades = Student.objects.values_list('grade', flat=True).distinct().order_by('grade')" in line and i < len(lines)-1 and "list(grades)" not in lines[i+1]:
+        indent = re.match(r'^(\s*)', line).group(1)
+        new_lines.append(f"{indent}grades = list(grades)  # force evaluation\n")
+    if "sections = Student.objects.values_list('section', flat=True).distinct().order_by('section')" in line and i < len(lines)-1 and "list(sections)" not in lines[i+1]:
+        indent = re.match(r'^(\s*)', line).group(1)
+        new_lines.append(f"{indent}sections = list(sections)  # force evaluation\n")
 
-with open('axis_saas/views.py', 'w') as f:
-    f.write(new_content)
+    # ---- reports: evaluate payments_qs as a list inside the block ----
+    # Find the line that creates payments_qs and convert it to list
+    if "payments_qs = PaymentTransaction.objects.filter(payment_date__gte=start_date, payment_date__lte=end_date)" in line:
+        indent = re.match(r'^(\s*)', line).group(1)
+        # After this line, add a conversion to list
+        new_lines.append(f"{indent}payments_qs = list(payments_qs)  # force evaluation inside schema context\n")
+        # Also, later in the same view there is 'payments = payments_qs.order_by(...)' which will now fail because payments_qs is a list.
+        # We'll handle that by replacing that line with a proper list comprehension.
+        # But we'll do it in a separate pass – for now, add a marker comment.
+        # We'll replace the order_by line later.
+    # Fix the later part: replace 'payments = payments_qs.order_by(...)' with proper list creation
+    # We'll look for that line and replace it.
+    if "payments = payments_qs.order_by('-payment_date')" in line:
+        indent = re.match(r'^(\s*)', line).group(1)
+        # Replace the line with: payments = sorted(payments_qs, key=lambda p: p.payment_date, reverse=True)
+        new_lines.pop()  # remove the line we just added
+        new_lines.append(f"{indent}payments = sorted(payments_qs, key=lambda p: p.payment_date, reverse=True)  # evaluate after list conversion\n")
+        # Also, we need to adjust any later .count() calls? They are already changed to len() in previous patches.
 
-print("✅ views.py patched with robust recent_payments query")
-PYEOF
+    i += 1
 
-python3 /tmp/patch_views.py
+with open(file_path, "w") as f:
+    f.writelines(new_lines)
 
-# ------------------------------------------------------------------
-# 2. Update fee_collection.html to show debug info and raw payments if needed
-# ------------------------------------------------------------------
-cat > templates/tenant/fee_collection.html << 'HTML'
-{% extends 'tenant/base.html' %}
-{% block title %}Fee Collection | {{ tenant.name }}{% endblock %}
-{% block body %}
-<div class="page-header">
-    <div>
-        <h1 class="page-title">Fee Collection</h1>
-        <p class="page-desc">Collect fees, generate monthly fee records, and print receipts</p>
-    </div>
-    <div class="header-stats">
-        <div class="stat-badge">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-            <span>Today: ₹{{ today_collection|default:0 }}</span>
-        </div>
-        <div class="stat-badge">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12h3l3-9 3 18 3-9h3"/></svg>
-            <span>Pending Total: ₹{{ total_pending_all|default:0 }}</span>
-        </div>
-        <button id="generateAllBtn" class="stat-badge" style="background: var(--primary); color: white; border: none; cursor: pointer;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-            Generate All Fees
-        </button>
-    </div>
-</div>
+print("✅ views.py patched – all querysets evaluated inside schema context.")
+EOF
 
-<!-- Quick Find Student -->
-<div class="filter-card">
-    <div class="card-header">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-        <h3>Find Student by Roll Number / Name / CNIC</h3>
-    </div>
-    <div class="search-form">
-        <input type="text" id="studentSearchInput" class="search-input" placeholder="e.g., 1001, name, CNIC...">
-        <button id="searchStudentBtn" class="btn-primary">Search</button>
-    </div>
-    <div id="searchResult" class="search-result" style="display:none;"></div>
-</div>
-
-<!-- Students with Pending Fees (Filtered & Paginated) -->
-<div class="students-list-card">
-    <div class="card-header">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-        <h3>Students with Pending Fees</h3>
-    </div>
-    <form method="get" class="filter-form" style="margin-bottom: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
-        <input type="text" name="pending_search" placeholder="Search name/roll" value="{{ search_filter }}" class="filter-input" style="width: 200px;">
-        <select name="pending_grade" class="filter-select" style="width: 120px;">
-            <option value="">All Grades</option>
-            {% for g in grades %}
-            <option value="{{ g }}" {% if grade_filter == g %}selected{% endif %}>{{ g }}</option>
-            {% endfor %}
-        </select>
-        <select name="pending_section" class="filter-select" style="width: 120px;">
-            <option value="">All Sections</option>
-            {% for s in sections %}
-            <option value="{{ s }}" {% if section_filter == s %}selected{% endif %}>{{ s }}</option>
-            {% endfor %}
-        </select>
-        <button type="submit" class="btn-primary">Filter</button>
-        <a href="{% url 'fee_collection' schema_name=tenant.schema_name %}" class="btn-secondary">Clear</a>
-    </form>
-    <div class="table-responsive">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Roll No</th>
-                    <th>Student Name</th>
-                    <th>Father Name</th>
-                    <th>Class/Section</th>
-                    <th>Pending (₹)</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for s in pending_students %}
-                <tr>
-                    <td><span class="roll-badge">{{ s.roll_number }}</span></td>
-                    <td><strong>{{ s.name }}</strong></td>
-                    <td>{{ s.father_name }}</td>
-                    <td>{{ s.grade }} - {{ s.section }}</td>
-                    <td class="pending-amount">₹{{ s.pending_total|floatformat:2 }}</td>
-                    <td><button class="select-student-btn" data-id="{{ s.id }}">Select</button></td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="6" class="empty-row">
-                    No students with pending fees.
-                    {% if total_pending_all == 0 %}
-                        <br><small>🎉 All fees are paid! Use "Generate All Fees" to create fee records for the current month.</small>
-                    {% else %}
-                        <br><small>ℹ️ Some students have no pending fees, but there is a total pending amount of ₹{{ total_pending_all }}. Check if fee records exist.</small>
-                    {% endif %}
-                </td>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% if pending_students.has_other_pages %}
-    <div class="pagination">
-        {% if pending_students.has_previous %}
-            <a href="?page=1{% if grade_filter %}&pending_grade={{ grade_filter }}{% endif %}{% if section_filter %}&pending_section={{ section_filter }}{% endif %}{% if search_filter %}&pending_search={{ search_filter }}{% endif %}" class="page-link">&laquo; First</a>
-            <a href="?page={{ pending_students.previous_page_number }}{% if grade_filter %}&pending_grade={{ grade_filter }}{% endif %}{% if section_filter %}&pending_section={{ section_filter }}{% endif %}{% if search_filter %}&pending_search={{ search_filter }}{% endif %}" class="page-link">Previous</a>
-        {% endif %}
-        <span class="current-page">Page {{ pending_students.number }} of {{ pending_students.paginator.num_pages }}</span>
-        {% if pending_students.has_next %}
-            <a href="?page={{ pending_students.next_page_number }}{% if grade_filter %}&pending_grade={{ grade_filter }}{% endif %}{% if section_filter %}&pending_section={{ section_filter }}{% endif %}{% if search_filter %}&pending_search={{ search_filter }}{% endif %}" class="page-link">Next</a>
-            <a href="?page={{ pending_students.paginator.num_pages }}{% if grade_filter %}&pending_grade={{ grade_filter }}{% endif %}{% if section_filter %}&pending_section={{ section_filter }}{% endif %}{% if search_filter %}&pending_search={{ search_filter }}{% endif %}" class="page-link">Last &raquo;</a>
-        {% endif %}
-    </div>
-    {% endif %}
-</div>
-
-<!-- Selected Student & Payment Form -->
-{% if selected_student %}
-<div class="student-panel" id="studentPanel">
-    <div class="student-info">
-        <div class="student-avatar">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-        </div>
-        <div>
-            <h3>{{ selected_student.name }} <span class="roll">({{ selected_student.roll_number }})</span></h3>
-            <p class="class-info">{{ selected_student.grade }} - {{ selected_student.section }} | Father: {{ selected_student.father_name }} | CNIC: {{ selected_student.father_cnic }}</p>
-        </div>
-        <div class="pending-badge">Pending: ₹{{ total_pending }}</div>
-    </div>
-
-    <form method="post" class="payment-form" id="paymentForm">
-        {% csrf_token %}
-        <input type="hidden" name="student_id" value="{{ selected_student.id }}">
-        <div class="form-row">
-            <div class="form-field">
-                <label>Amount Received (₹)</label>
-                <input type="number" name="amount" id="amountInput" step="0.01" required placeholder="Enter amount">
-            </div>
-            <div class="form-field">
-                <label>Payment Mode</label>
-                <select name="payment_mode">
-                    <option value="cash">Cash</option>
-                    <option value="bank_transfer">Bank Transfer</option>
-                    <option value="cheque">Cheque</option>
-                    <option value="online">Online</option>
-                </select>
-            </div>
-            <div class="form-field">
-                <label>Remaining After Payment</label>
-                <input type="text" id="remainingAfter" readonly placeholder="Will be calculated">
-            </div>
-            <div class="form-field submit-field">
-                <button type="submit" class="btn-primary">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
-                    Process Payment
-                </button>
-            </div>
-        </div>
-    </form>
-
-    <div class="pending-table">
-        <h4>Pending Fee Records</h4>
-        <div class="table-responsive">
-            <table class="data-table">
-                <thead>
-                    <tr><th>Month/Year</th><th>Amount (₹)</th><th>Paid (₹)</th><th>Remaining (₹)</th><th>Due Date</th></tr>
-                </thead>
-                <tbody>
-                    {% for r in pending_records %}
-                    <tr>
-                        <td>{{ r.month }}/{{ r.year }}</td>
-                        <td>₹{{ r.amount }}</td>
-                        <td>₹{{ r.paid_amount }}</td>
-                        <td class="remaining">₹{{ r.remaining }}</td>
-                        <td>{{ r.due_date|date:"Y-m-d" }}</td>
-                    </tr>
-                    {% empty %}
-                    <tr id="noPendingRow">
-                        <td colspan="5" class="empty-row">
-                            No pending fees for this student.
-                            <button type="button" class="btn-generate" id="generateSingleBtn">Generate Current Month Fee</button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                    {% if pending_records %}
-                    <tr class="total-row">
-                        <td colspan="3"><strong>Total Pending</strong></td>
-                        <td colspan="2"><strong>₹<span id="totalPending">{{ total_pending }}</span></strong></td>
-                    </tr>
-                    {% endif %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
-{% endif %}
-
-<!-- Recent Payments History (robust version) -->
-<div class="history-card">
-    <div class="card-header">
-        <h3>Recent Payments (Last 5)</h3>
-        <a href="{% url 'reports' schema_name=tenant.schema_name %}?type=collection" class="view-all">View All →</a>
-    </div>
-    <div class="table-responsive">
-        <table class="data-table">
-            <thead>
-                <tr><th>Receipt</th><th>Student</th><th>Amount</th><th>Date</th><th>Mode</th><th>Receipt</th></tr>
-            </thead>
-            <tbody>
-                {% for p in recent_payments %}
-                <tr>
-                    <td><code>{{ p.receipt_number }}</code></td>
-                    <td>{{ p.student.name }} ({{ p.student.roll_number }})<br><small>{{ p.student.grade }} - {{ p.student.section }}</small></td>
-                    <td class="amount">₹{{ p.amount|floatformat:2 }}</td>
-                    <td>{{ p.payment_date|date:"d M Y" }}</td>
-                    <td>{{ p.get_payment_mode_display }}</td>
-                    <td><a href="{% url 'fee_receipt' schema_name=tenant.schema_name receipt_id=p.id %}" class="receipt-link">View</a></td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="6" class="empty-row">
-                    {% if total_payments_count == 0 %}
-                        <strong>📭 No payments recorded for this school yet.</strong>
-                        <br><small>👉 Use the form above to collect a fee, or click <strong>“Generate All Fees”</strong> to create fee records first.</small>
-                    {% else %}
-                        <strong>⚠️ There are {{ total_payments_count }} payment(s) in this school’s database, but they are not showing.</strong>
-                        <br><small>This may be because the associated student records are missing. <a href="{% url 'reports' schema_name=tenant.schema_name %}?type=collection&quick_filter=all">View all payments in Reports →</a></small>
-                        <!-- Debug: show raw payment IDs -->
-                        <div style="margin-top: 10px; font-size: 11px; color: gray;">
-                            Debug: Payment IDs exist (check your console). If you see this, contact support.
-                        </div>
-                    {% endif %}
-                </td>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<style>
-/* existing styles – keep as is */
-.header-stats { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
-.stat-badge { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: var(--surface-alt); border-radius: 2rem; font-size: 0.85rem; font-weight: 500; border: 1px solid var(--border); }
-.card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
-.card-header h3 { flex: 1; font-size: 1.1rem; font-weight: 600; }
-.search-form { display: flex; gap: 0.75rem; margin-bottom: 0.5rem; }
-.search-input { flex: 1; padding: 0.6rem 1rem; border-radius: 2rem; border: 1px solid var(--border); background: var(--surface-alt); }
-.filter-form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: flex-end; margin-bottom: 1rem; }
-.filter-input, .filter-select { padding: 0.4rem 0.75rem; border-radius: 2rem; border: 1px solid var(--border); background: var(--surface-alt); }
-.pending-amount { font-weight: 700; color: var(--danger); }
-.select-student-btn { background: var(--primary); color: white; border: none; border-radius: 1rem; padding: 0.25rem 0.75rem; cursor: pointer; }
-.student-panel { margin-top: 0; }
-.student-info { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; background: var(--surface-alt); padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem; }
-.student-avatar { width: 48px; height: 48px; background: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; }
-.pending-badge { background: var(--danger); color: white; padding: 0.25rem 0.75rem; border-radius: 2rem; font-weight: 600; }
-.payment-form { padding: 1rem; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-.form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
-.form-field { display: flex; flex-direction: column; gap: 0.25rem; }
-.form-field label { font-weight: 600; font-size: 0.8rem; }
-.form-field input, .form-field select { padding: 0.6rem; border-radius: 0.5rem; border: 1px solid var(--border); background: var(--surface-alt); }
-.submit-field { justify-content: flex-end; display: flex; flex-direction: column; }
-.pending-table, .history-card { margin-top: 1rem; }
-.total-row { background: var(--surface-alt); font-weight: 600; }
-.remaining { font-weight: 700; color: var(--danger); }
-.btn-generate { background: var(--primary); color: white; border: none; border-radius: 2rem; padding: 0.3rem 0.8rem; margin-top: 0.5rem; cursor: pointer; }
-.search-result { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.5rem; }
-.result-item { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; border-bottom: 1px solid var(--border); cursor: pointer; }
-.result-item:hover { background: var(--surface-alt); }
-.empty-row { text-align: center; padding: 1.5rem; color: var(--muted); }
-.pagination { margin-top: 1rem; text-align: center; display: flex; justify-content: center; gap: 0.5rem; flex-wrap: wrap; }
-.page-link { padding: 0.3rem 0.8rem; background: var(--surface-alt); border: 1px solid var(--border); border-radius: 2rem; text-decoration: none; color: var(--text); }
-.page-link:hover { background: var(--primary); color: white; }
-.current-page { padding: 0.3rem 0.8rem; background: var(--primary); color: white; border-radius: 2rem; }
-</style>
-
-<script>
-function getCookie(name) {
-    let value = null;
-    if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';');
-        for (let i = 0; i < cookies.length; i++) {
-            const cookie = cookies[i].trim();
-            if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                value = decodeURIComponent(cookie.substring(name.length + 1));
-                break;
-            }
-        }
-    }
-    return value;
-}
-const csrfToken = getCookie('csrftoken');
-
-function loadStudent(studentId) {
-    const url = `/portal/{{ tenant.schema_name }}/fee/collection/${studentId}/`;
-    window.location.href = url;
-}
-
-function bindSelectButtons() {
-    document.querySelectorAll('.select-student-btn').forEach(btn => {
-        btn.removeEventListener('click', window.selectHandler);
-        const handler = (e) => {
-            e.stopPropagation();
-            const id = btn.getAttribute('data-id');
-            if (id) loadStudent(id);
-        };
-        btn.addEventListener('click', handler);
-        window.selectHandler = handler;
-    });
-}
-bindSelectButtons();
-
-// Student search
-const searchInput = document.getElementById('studentSearchInput');
-const searchBtn = document.getElementById('searchStudentBtn');
-const searchResultDiv = document.getElementById('searchResult');
-
-async function performSearch() {
-    const q = searchInput.value.trim();
-    if (q.length < 2) {
-        searchResultDiv.style.display = 'none';
-        return;
-    }
-    try {
-        const url = `/portal/{{ tenant.schema_name }}/api/student-search/?q=${encodeURIComponent(q)}`;
-        const resp = await fetch(url);
-        const data = await resp.json();
-        if (data.length === 0) {
-            searchResultDiv.innerHTML = '<div class="result-item">No student found</div>';
-            searchResultDiv.style.display = 'block';
-            return;
-        }
-        let html = '';
-        data.forEach(s => {
-            html += `<div class="result-item" data-id="${s.id}">
-                        <div><strong>${s.name}</strong><br><small>${s.roll_no} | ${s.grade}</small></div>
-                        <button class="select-student-btn" data-id="${s.id}">Select</button>
-                     </div>`;
-        });
-        searchResultDiv.innerHTML = html;
-        searchResultDiv.style.display = 'block';
-        bindSelectButtons();
-    } catch(e) {
-        console.error('Search error:', e);
-        searchResultDiv.innerHTML = '<div class="result-item">Error searching. Please try again.</div>';
-        searchResultDiv.style.display = 'block';
-    }
-}
-searchBtn.addEventListener('click', performSearch);
-searchInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') performSearch(); });
-
-// Remaining amount calculation
-const amountInput = document.getElementById('amountInput');
-const remainingSpan = document.getElementById('remainingAfter');
-const totalPendingSpan = document.getElementById('totalPending');
-if (amountInput && totalPendingSpan) {
-    const total = parseFloat(totalPendingSpan.innerText);
-    amountInput.addEventListener('input', function() {
-        const paid = parseFloat(this.value) || 0;
-        const remaining = total - paid;
-        remainingSpan.value = remaining > 0 ? `₹${remaining.toFixed(2)}` : '₹0.00';
-    });
-    amountInput.dispatchEvent(new Event('input'));
-}
-
-// Generate all fees
-const generateAllBtn = document.getElementById('generateAllBtn');
-if (generateAllBtn) {
-    generateAllBtn.addEventListener('click', async () => {
-        if (!confirm('Generate fee records for current month for all active students?')) return;
-        generateAllBtn.disabled = true;
-        generateAllBtn.innerHTML = 'Generating...';
-        try {
-            const resp = await fetch('/api/manual-generate/', {
-                method: 'POST',
-                headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
-            });
-            const data = await resp.json();
-            if (data.message) alert(data.message);
-            else if (data.error) alert('Error: ' + data.error);
-            location.reload();
-        } catch(e) {
-            console.error('Generation error:', e);
-            alert('Error generating fees: ' + e.message);
-        } finally {
-            generateAllBtn.disabled = false;
-            generateAllBtn.innerHTML = 'Generate All Fees';
-        }
-    });
-}
-
-// Generate single fee for current month
-const generateSingleBtn = document.getElementById('generateSingleBtn');
-if (generateSingleBtn) {
-    generateSingleBtn.addEventListener('click', async () => {
-        const studentId = {{ selected_student.id|default:'null' }};
-        if (!studentId) return;
-        if (!confirm(`Generate current month fee for {{ selected_student.name }}?`)) return;
-        generateSingleBtn.disabled = true;
-        generateSingleBtn.innerHTML = 'Generating...';
-        try {
-            const resp = await fetch(`/api/manual-generate-single/?student_id=${studentId}`, {
-                method: 'POST',
-                headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
-            });
-            const data = await resp.json();
-            if (data.message) alert(data.message);
-            else if (data.error) alert('Error: ' + data.error);
-            location.reload();
-        } catch(e) {
-            console.error('Generation error:', e);
-            alert('Error generating fee: ' + e.message);
-        } finally {
-            generateSingleBtn.disabled = false;
-            generateSingleBtn.innerHTML = 'Generate Current Month Fee';
-        }
-    });
-}
-
-// Console debug
-console.log('FeeCollection Debug:', {
-    recentPaymentsCount: {{ recent_payments|length }},
-    totalPaymentsCount: {{ total_payments_count|default:0 }},
-    pendingTotal: {{ total_pending_all|default:0 }},
-    currentTenantSchema: '{{ tenant.schema_name }}'
-});
-</script>
-{% endblock %}
-HTML
-
-echo "✅ fee_collection.html updated with robust recent payments section"
-
-# ------------------------------------------------------------------
-# 3. Add a management command to fix orphaned payment-student links (optional)
-# ------------------------------------------------------------------
-cat > axis_saas/management/commands/fix_orphan_payments.py << 'PYEOF'
-from django.core.management.base import BaseCommand
-from django_tenants.utils import schema_context
-from axis_saas.models import SchoolClient, PaymentTransaction, Student
-
-class Command(BaseCommand):
-    help = 'Check for payments with missing student references and optionally delete them'
-
-    def add_arguments(self, parser):
-        parser.add_argument('--delete', action='store_true', help='Delete orphaned payments')
-
-    def handle(self, *args, **options):
-        tenants = SchoolClient.objects.filter(is_active=True).exclude(schema_name='public')
-        for tenant in tenants:
-            with schema_context(tenant.schema_name):
-                orphaned = []
-                for payment in PaymentTransaction.objects.all():
-                    if not Student.objects.filter(id=payment.student_id).exists():
-                        orphaned.append(payment)
-                if orphaned:
-                    self.stdout.write(f"Tenant {tenant.schema_name}: {len(orphaned)} orphaned payments")
-                    for p in orphaned:
-                        self.stdout.write(f"  - {p.receipt_number} (student_id={p.student_id})")
-                    if options['delete']:
-                        count = len(orphaned)
-                        for p in orphaned:
-                            p.delete()
-                        self.stdout.write(f"  Deleted {count} orphaned payments")
-                else:
-                    self.stdout.write(f"Tenant {tenant.schema_name}: no orphaned payments")
-PYEOF
-
-echo "✅ Added fix_orphan_payments management command"
 echo ""
-echo "═══════════════════════════════════════════════════════════════"
-echo "📌 NEXT STEPS:"
-echo "   1. Restart your Django server"
-echo "   2. Hard refresh the Fee Collection page"
-echo "   3. Open browser console (F12) to see the debug counts"
-echo "   4. If the warning still appears, run:"
-echo "      python manage.py fix_orphan_payments --delete"
-echo "   5. Then try collecting a new payment – it will appear in Recent Payments"
-echo "═══════════════════════════════════════════════════════════════"
+echo "🚀 Restart your Django server:"
+echo "   source venv/bin/activate"
+echo "   python3 manage.py runserver"

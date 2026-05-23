@@ -33,7 +33,8 @@ def dashboard(request, schema_name):
         total_payments_count = PaymentTransaction.objects.count()
         recent_payments = PaymentTransaction.objects.select_related('student').order_by('-payment_date')[:5]
         recent_payments = list(recent_payments)  # force evaluation inside schema context
-        print(f"DEBUG fee_collection: total_payments={PaymentTransaction.objects.count()}, recent_count={len(recent_payments)}")
+        recent_payments = list(recent_payments)  # force evaluation
+        print(f"DEBUG fee_collection: total_payments={PaymentTransaction.objects.count()}, recent_count={recent_payments.count()}")
         top_defaulters = []
         for student in Student.objects.all():
             pending = sum(fr.remaining for fr in student.fee_records.filter(status__in=['pending', 'partial', 'overdue']))
@@ -83,11 +84,7 @@ def student_list(request, schema_name):
         for s in students:
             s.pending_amount = sum(fr.remaining for fr in s.fee_records.filter(status__in=['pending', 'partial', 'overdue']))
         grades = Student.objects.values_list('grade', flat=True).distinct().order_by('grade')
-        grades = list(grades)  # force evaluation inside schema context
-        grades = list(grades)  # force evaluation
         sections = Student.objects.values_list('section', flat=True).distinct().order_by('section')
-        sections = list(sections)  # force evaluation inside schema context
-        sections = list(sections)  # force evaluation
         status_choices = Student.STATUS_CHOICES
     context = {
         'tenant': tenant, 'students': students, 'grades': grades, 'sections': sections,
@@ -123,7 +120,8 @@ def fee_collection(request, schema_name, student_id=None):
         total_payments_count = PaymentTransaction.objects.count()
         recent_payments = PaymentTransaction.objects.select_related('student').order_by('-payment_date')[:5]
         recent_payments = list(recent_payments)  # force evaluation inside schema context
-        print(f"DEBUG fee_collection: total_payments={PaymentTransaction.objects.count()}, recent_count={len(recent_payments)}")
+        recent_payments = list(recent_payments)  # force evaluation
+        print(f"DEBUG fee_collection: total_payments={PaymentTransaction.objects.count()}, recent_count={recent_payments.count()}")
         total_pending_all = sum(fr.remaining for fr in FeeRecord.objects.filter(status__in=['pending', 'partial', 'overdue']))
         
         # Filters for pending students
@@ -165,11 +163,7 @@ def fee_collection(request, schema_name, student_id=None):
         
         # Get distinct grades and sections for filters
         grades = Student.objects.values_list('grade', flat=True).distinct().order_by('grade')
-        grades = list(grades)  # force evaluation inside schema context
-        grades = list(grades)  # force evaluation
         sections = Student.objects.values_list('section', flat=True).distinct().order_by('section')
-        sections = list(sections)  # force evaluation inside schema context
-        sections = list(sections)  # force evaluation
         
         if request.method == 'POST':
             student_id_post = request.POST.get('student_id')
@@ -314,7 +308,6 @@ def reports(request, schema_name):
             quick_filter = 'last6months'
     with schema_context(schema_name):
         payments_qs = PaymentTransaction.objects.filter(payment_date__gte=start_date, payment_date__lte=end_date)
-        payments_qs = list(payments_qs)  # force evaluation inside schema context
         # Ensure we get results even if select_related later fails (we don't use select_related there)
         # No change needed, but we add a safety check
         if payments_qs.count() == 0 and PaymentTransaction.objects.filter(payment_date__year=start_date.year).count() > 0:
@@ -350,8 +343,6 @@ def reports(request, schema_name):
         mode_distribution = [{'name': k, 'amount': v} for k, v in mode_totals.items()]
         class_pending = []
         grades = Student.objects.values_list('grade', flat=True).distinct().order_by('grade')
-        grades = list(grades)  # force evaluation inside schema context
-        grades = list(grades)  # force evaluation
         for grade in grades:
             students = Student.objects.filter(grade=grade)
             pending = sum(sum(fr.remaining for fr in s.fee_records.filter(status__in=['pending', 'partial', 'overdue'])) for s in students)
