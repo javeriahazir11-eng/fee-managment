@@ -2,38 +2,37 @@ from django.db import connection
 from django_tenants.middleware import TenantMainMiddleware
 from django_tenants.utils import get_tenant_model
 from django.urls import resolve
-from django.http import Http404
 
 class URLPathTenantMiddleware(TenantMainMiddleware):
     """
-    Custom tenant middleware: only look for tenant if the URL path starts with '/portal/'.
-    Otherwise, use the public schema (tenant = None).
+    Custom tenant middleware: extract schema_name from URL path.
+    If tenant record is missing, do NOT raise 404 – let the view handle creation.
     """
     def __call__(self, request):
-        # If request path does NOT start with /portal/, use public schema
+        # Non‑portal paths → public schema
         if not request.path_info.startswith('/portal/'):
             request.tenant = None
-            # Ensure we are using public schema (already the default)
+            connection.set_schema_to_public()
             return self.get_response(request)
 
-        # Path starts with /portal/ – extract schema_name from URL
-        schema_name = None
+        # Extract schema_name from /portal/<schema_name>/...
+        parts = request.path_info.strip('/').split('/')
+        if len(parts) >= 2 and parts[0] == 'portal':
+            schema_name = parts[1]
+        else:
+            request.tenant = None
+            return self.get_response(request)
+
+        TenantModel = get_tenant_model()
         try:
-            match = resolve(request.path_info)
-            if 'schema_name' in match.kwargs:
-                schema_name = match.kwargs['schema_name']
-        except:
-            pass
+            tenant = TenantModel.objects.get(schema_name=schema_name)
+            request.tenant = tenant
+            connection.set_tenant(request.tenant)
+        except TenantModel.DoesNotExist:
+            # No SchoolClient row yet – set a flag so the view can auto‑create it
+            request.tenant = None
+            request.missing_tenant_schema = schema_name
+            # Still proceed; we will keep connection on public schema
+            connection.set_schema_to_public()
 
-        if schema_name:
-            TenantModel = get_tenant_model()
-            try:
-                tenant = TenantModel.objects.get(schema_name=schema_name)
-                request.tenant = tenant
-                connection.set_tenant(request.tenant)
-                return self.get_response(request)
-            except TenantModel.DoesNotExist:
-                raise Http404("Tenant not found")
-
-        # If no schema_name found, fall back to domain detection
-        return super().__call__(request)
+        return self.get_response(request)

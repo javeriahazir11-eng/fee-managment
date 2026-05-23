@@ -19,37 +19,39 @@ def saas_homepage(request):
     ''')
 
 def school_login(request, schema_name):
-    # Auto‑create missing SchoolClient record if the schema exists in the database
-    try:
-        tenant = SchoolClient.objects.get(schema_name=schema_name)
-    except SchoolClient.DoesNotExist:
-        # The schema might already exist (from post_schema_sync) – create the tenant record
+    # If the middleware flagged a missing tenant, try to create it now
+    missing_schema = getattr(request, 'missing_tenant_schema', None)
+    if missing_schema == schema_name:
+        # Check if the actual PostgreSQL schema exists (by trying to switch to it)
+        from django_tenants.utils import schema_context
+        from django.db import connection
+        schema_exists = False
         try:
-            # Check if the actual PostgreSQL schema exists (we can try to query a dummy table inside it)
-            from django_tenants.utils import schema_context
-            try:
-                with schema_context(schema_name):
-                    from django.contrib.auth import get_user_model
-                    User = get_user_model()
-                    # If we can read users, the schema exists
-                    user_exists = User.objects.filter(username='s').exists()
-            except Exception:
-                user_exists = False
+            # Temporarily switch to the schema and run a harmless query
+            with schema_context(schema_name):
+                from django.contrib.auth import get_user_model
+                User = get_user_model()
+                # Just check if we can count users (the schema might be empty)
+                User.objects.exists()
+            schema_exists = True
+        except Exception:
+            schema_exists = False
 
-            if user_exists:
-                # Create the SchoolClient row
-                tenant = SchoolClient.objects.create(
-                    name=f"{schema_name.title()} School",
-                    schema_name=schema_name,
-                    admin_username='s',
-                    admin_password='admin123',  # default; user can change later
-                    is_active=True
-                )
-                print(f"🆕 Auto‑created missing SchoolClient for '{schema_name}'")
-            else:
-                raise Http404("Tenant schema does not exist")
-        except Exception as e:
-            raise Http404(f"Tenant not found: {str(e)}")
+        if schema_exists:
+            # Create the missing SchoolClient row
+            tenant = SchoolClient.objects.create(
+                name=f"{schema_name.title()} School",
+                schema_name=schema_name,
+                admin_username='s',
+                admin_password='admin123',   # default; can be changed later
+                is_active=True
+            )
+            print(f"🆕 Auto‑created SchoolClient for '{schema_name}'")
+        else:
+            raise Http404(f"Tenant schema '{schema_name}' does not exist.")
+
+    # Retrieve tenant (should now exist)
+    tenant = get_object_or_404(SchoolClient, schema_name=schema_name)
 
     if request.method == 'POST':
         username = request.POST.get('username')
