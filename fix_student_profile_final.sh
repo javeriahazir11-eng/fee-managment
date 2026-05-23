@@ -1,14 +1,14 @@
 #!/bin/bash
 
-# fix_student_profile.sh – repairs student_profile view (aggregate before list conversion)
-# Run once from project root: ./fix_student_profile.sh
+# fix_student_profile_final.sh – correctly compute aggregates before list conversion
+# Run once from project root: ./fix_student_profile_final.sh
 
 set -e
 
 cd ~/axis_school_sys
 
 # Backup current views.py
-cp axis_saas/views.py axis_saas/views.py.backup_student_profile
+cp axis_saas/views.py axis_saas/views.py.backup_student_final
 
 python3 << 'EOF'
 import re
@@ -37,17 +37,13 @@ corrected_func = '''def student_profile(request, schema_name, student_id):
     return render(request, 'tenant/student_profile.html', context)'''
 
 # Use regex to replace the entire student_profile function
-# We'll match from "def student_profile(" to the next "def " (or end of file)
-# But simpler: find the function start and replace its body up to the next function.
-# We'll use a more precise approach: locate the def line and then replace everything until the next def at same indentation.
 pattern = r'(def student_profile\(request, schema_name, student_id\):.*?)(?=\n\ndef |\Z)'
-# Use DOTALL to match across lines
 content_new = re.sub(pattern, corrected_func, content, flags=re.DOTALL)
 
 with open(file_path, "w") as f:
     f.write(content_new)
 
-print("✅ student_profile view fixed – aggregate called before list conversion.")
+print("✅ student_profile view fixed – aggregates calculated before list conversion.")
 EOF
 
 echo ""
