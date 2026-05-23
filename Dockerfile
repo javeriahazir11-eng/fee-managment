@@ -17,6 +17,7 @@ COPY . .
 
 # Create persistent directories
 RUN mkdir -p /data/staticfiles /data/media
+ENV DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy
 
 # Collect static files (shared schema)
 RUN python manage.py collectstatic --noinput
