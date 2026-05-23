@@ -6,7 +6,7 @@ env = environ.Env(DEBUG=(bool, False))
 BASE_DIR = Path(__file__).resolve().parent.parent
 environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
-SECRET_KEY = env('SECRET_KEY', default='django-insecure-fallback-for-build-only-xyz123')
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-fallback-for-build-only')
 DEBUG = env('DEBUG')
 
 ALLOWED_HOSTS = ['localhost', '.localhost', '127.0.0.1']

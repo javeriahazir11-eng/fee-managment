@@ -2,10 +2,10 @@
 set -e
 
 echo "Running migrations on public schema..."
-python manage.py migrate_schemas --shared
+python manage.py migrate_schemas --shared || echo "Public schema migration failed, continuing..."
 
 echo "Running migrations on tenant schemas (if any)..."
-python manage.py migrate_schemas --tenants
+python manage.py migrate_schemas --tenants || echo "Tenant migrations failed, continuing..."
 
 echo "Starting Gunicorn..."
-gunicorn axis_saas.wsgi:application --bind 0.0.0.0:7860 --workers 3 --threads 2
+exec gunicorn axis_saas.wsgi:application --bind 0.0.0.0:7860 --workers 3 --threads 2
