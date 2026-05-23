@@ -124,32 +124,3 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
 SESSION_COOKIE_PATH = '/'
 SESSION_FILE_PATH = '/tmp/django_sessions/'
-
-# ---------- PRODUCTION OVERRIDES (added by deploy_prep.sh) ----------
-import dj_database_url
-import os
-
-DEBUG = False
-
-ALLOWED_HOSTS = ['*']   # HF Space ka domain automatically allow ho jayega
-
-# Static files (WhiteNoise)
-STATIC_URL = '/static/'
-STATIC_ROOT = os.path.join('/data', 'staticfiles')   # HF persistent storage
-MEDIA_ROOT = os.path.join('/data', 'media')
-MEDIA_URL = '/media/'
-
-# WhiteNoise middleware (must be high up)
-MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
-
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
-
-# Database from environment variable
-DATABASES['default'] = dj_database_url.config(conn_max_age=600, ssl_require=True)
-
-# Session & security (adjust as needed)
-CSRF_TRUSTED_ORIGINS = ['https://*.hf.space', 'http://localhost:8000']
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
-# --------------------------------------------------------------------

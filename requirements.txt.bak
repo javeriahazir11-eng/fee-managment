@@ -306,7 +306,3 @@ wifite==2.8.1
 xdg==5
 yt-dlp==2025.4.30
 zipp==3.23.0
-gunicorn
-whitenoise
-dj-database-url
-django-environ
