@@ -68,7 +68,7 @@ class PublicOnlyAdminMixin:
 class SchoolClientForm(forms.ModelForm):
     class Meta:
         model = SchoolClient
-        fields = ['name', 'schema_name', 'admin_username', 'admin_password', 'is_active', 'tenant_type']
+        fields = ['name', 'schema_name', 'admin_username', 'admin_password', 'is_active']
         widgets = {
             'admin_password': forms.PasswordInput(render_value=True),
         }
@@ -100,9 +100,6 @@ class SchoolClientAdmin(TenantAdminMixin, admin.ModelAdmin):
         }),
         ('Dynamic Sub-Tenant Authority Provisioning', {
             'fields': ('admin_username', 'admin_password'),
-        }),
-                ('Tenant Type', {
-            'fields': ('tenant_type',),
         }),
         ('Generated Access Routes', {
             'fields': ('school_admin_portal_url',),

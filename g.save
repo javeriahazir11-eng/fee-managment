@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Fix axis_saas/public_urls.py – corrects the broken re_path and restores all routes.
-Run: python3 fix_public_urls.py
+Final fix for axis_saas/public_urls.py – corrects syntax error and restores all routes.
+Run: python3 fix_public_urls_final.py
 """
 
 import os
@@ -15,7 +15,7 @@ if os.path.exists(URLS_FILE):
     shutil.copy2(URLS_FILE, backup)
     print(f"✅ Backed up {URLS_FILE} → {backup}")
 
-# Correct content (complete)
+# Correct content
 correct_content = '''from django.contrib import admin
 from django.urls import path, re_path
 from django.conf import settings as django_settings
@@ -189,4 +189,5 @@ with open(URLS_FILE, "w") as f:
 
 print(f"\n✅ Fixed {URLS_FILE}")
 print("➡️ Now run: python3 manage.py check")
+
 print("➡️ If no errors, start the server: python3 manage.py runserver")

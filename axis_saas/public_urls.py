@@ -6,10 +6,8 @@ from django.http import HttpResponse, Http404
 from django.shortcuts import render, redirect, get_object_or_404
 
 from .models import SchoolClient
-from .views import dashboard, student_list, student_profile, fee_collection, fee_receipt, debug_payments_api
-from .views import defaulters, reports, settings, fee_structure, fee_settings, family_payment
-from .views import student_search_api, add_student, edit_student, fee_status_api, manual_generate_api, manual_generate_single_api
-from .views import student_fee_records_api, student_payments_api
+
+from .views import add_student, dashboard, debug_payments_api, defaulters, edit_student, family_payment, fee_collection, fee_receipt, fee_settings, fee_status_api, fee_structure, gym_checkin_api, gym_checkout_api, gym_receipt, manual_generate_api, manual_generate_single_api, reports, settings, student_fee_records_api, student_list, student_payments_api, student_profile, student_search_api
 
 def saas_homepage(request):
     return HttpResponse('''
@@ -132,7 +130,6 @@ urlpatterns = [
     
     # Fee collection
     re_path(r'^portal/(?P<schema_name>[a-zA-Z0-9_-]+)/fee/collection/(?:(?P<student_id>\d+)/)?$', fee_collection_view, name='fee_collection'),
-    
     path('portal/<slug:schema_name>/fee/receipt/<int:receipt_id>/', fee_receipt_view, name='fee_receipt'),
     path('portal/<slug:schema_name>/defaulters/', defaulters_view, name='defaulters'),
     path('portal/<slug:schema_name>/reports/', reports_view, name='reports'),
@@ -143,7 +140,13 @@ urlpatterns = [
     path('portal/<slug:schema_name>/api/student-search/', student_search_api_view, name='student_search_api'),
     path('portal/<slug:schema_name>/api/student/<int:student_id>/fee-records/', student_fee_records_api_view, name='student_fee_records_api'),
     path('portal/<slug:schema_name>/api/student/<int:student_id>/payments/', student_payments_api_view, name='student_payments_api'),
+    
+    # Gym API
+    path('api/gym/checkin/', gym_checkin_api, name='gym_checkin_api'),
+    path('api/gym/checkout/', gym_checkout_api, name='gym_checkout_api'),
+    path('portal/<slug:schema_name>/gym/receipt/<int:receipt_id>/', gym_receipt, name='gym_receipt'),
 ]
 
 if django_settings.DEBUG:
     urlpatterns += static(django_settings.MEDIA_URL, document_root=django_settings.MEDIA_ROOT)
+

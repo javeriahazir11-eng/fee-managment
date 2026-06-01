@@ -101,9 +101,6 @@ class SchoolClientAdmin(TenantAdminMixin, admin.ModelAdmin):
         ('Dynamic Sub-Tenant Authority Provisioning', {
             'fields': ('admin_username', 'admin_password'),
         }),
-                ('Tenant Type', {
-            'fields': ('tenant_type',),
-        }),
         ('Generated Access Routes', {
             'fields': ('school_admin_portal_url',),
             'description': 'Once saved, the system automatically builds the exact landing gate link for this school node below.'

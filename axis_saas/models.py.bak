@@ -13,7 +13,6 @@ class SchoolClient(TenantMixin):
     admin_username = models.CharField(max_length=150, default="admin_pending")
     admin_password = models.CharField(max_length=128, default="AxisFallback123!")
     school_logo = models.FileField(upload_to="school_logos/", blank=True, null=True)
-    tenant_type = models.CharField(max_length=20, choices=[("school", "School"), ("gym", "Gym")], default="school")
     
     auto_create_schema = True
 
@@ -29,6 +28,7 @@ class SchoolClient(TenantMixin):
                 tenant=self,
                 is_primary=True
             )
+
 class SchoolDomain(DomainMixin):
     pass
 

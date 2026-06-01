@@ -46,3 +46,51 @@ class FamilyPaymentForm(forms.Form):
     amount = forms.DecimalField(max_digits=10, decimal_places=2, required=False, label="Amount (leave empty for full)")
     payment_mode = forms.ChoiceField(choices=PaymentTransaction.PAYMENT_MODE_CHOICES, label="Payment Mode")
     remarks = forms.CharField(required=False, widget=forms.Textarea(attrs={'rows': 2}), label="Remarks")
+
+
+# ------------------- Gym Forms -------------------
+class GymCustomerForm(forms.ModelForm):
+    class Meta:
+        from .models import GymCustomer
+        model = GymCustomer
+        fields = ['name', 'phone', 'email', 'address', 'gender', 'date_of_birth',
+                  'membership_start', 'membership_end', 'monthly_fee', 'status', 'notes', 'photo']
+        widgets = {
+            'date_of_birth': forms.DateInput(attrs={'type': 'date'}),
+            'membership_start': forms.DateInput(attrs={'type': 'date'}),
+            'membership_end': forms.DateInput(attrs={'type': 'date'}),
+            'address': forms.Textarea(attrs={'rows': 2}),
+        }
+
+class GymAttendanceForm(forms.Form):
+    customer = forms.ModelChoiceField(queryset=None, label="Customer")
+    check_out = forms.DateTimeField(required=False, widget=forms.DateTimeInput(attrs={'type': 'datetime-local'}))
+    notes = forms.CharField(required=False, widget=forms.Textarea(attrs={'rows': 2}))
+
+    def __init__(self, *args, **kwargs):
+        from .models import GymCustomer
+        super().__init__(*args, **kwargs)
+        self.fields['customer'].queryset = GymCustomer.objects.filter(status='active')
+
+class GymPaymentForm(forms.Form):
+    customer = forms.ModelChoiceField(queryset=None, label="Customer")
+    amount = forms.DecimalField(max_digits=10, decimal_places=2, label="Amount (₹)")
+    payment_mode = forms.ChoiceField(choices=[('cash','Cash'),('bank_transfer','Bank Transfer'),('cheque','Cheque'),('online','Online')], label="Payment Mode")
+    remarks = forms.CharField(required=False, widget=forms.Textarea(attrs={'rows': 2}))
+
+    def __init__(self, *args, **kwargs):
+        from .models import GymCustomer
+        super().__init__(*args, **kwargs)
+        self.fields['customer'].queryset = GymCustomer.objects.filter(status='active')
+
+class GymSettingsForm(forms.ModelForm):
+    class Meta:
+        from .models import GymSettings
+        model = GymSettings
+        fields = ['default_monthly_fee', 'subscription_generation_day', 'due_date_offset', 'late_fee_penalty']
+        widgets = {
+            'default_monthly_fee': forms.NumberInput(attrs={'step': '0.01'}),
+            'subscription_generation_day': forms.NumberInput(attrs={'min': 1, 'max': 31}),
+            'due_date_offset': forms.NumberInput(attrs={'min': 1}),
+            'late_fee_penalty': forms.NumberInput(attrs={'step': '0.01'}),
+        }
