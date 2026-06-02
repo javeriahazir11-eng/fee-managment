@@ -23,17 +23,14 @@
     <div class="summary-card"><div class="summary-label">Pending</div><div class="summary-value pending">₹{{ pending_total|floatformat:2 }}</div></div>
 </div>
 
-<!-- Subscription Table -->
 <div class="table-card">
     <h3>Subscription History</h3>
     <div class="table-responsive">
         <table class="data-table" id="subscriptionsTable">
-            <thead>
-                <tr><th>Month/Year</th><th>Amount</th><th>Paid</th><th>Status</th><th>Action</th><th>Receipts</th></tr>
-            </thead>
+            <thead><tr><th>Month/Year</th><th>Amount</th><th>Paid</th><th>Status</th><th>Action</th><th>Receipts</th></tr></thead>
             <tbody>
                 {% for s in subscriptions %}
-                <td>
+                <tr>
                     <td>{{ s.month }}/{{ s.year }}</td>
                     <td>₹{{ s.amount }}</td>
                     <td>₹{{ s.paid_amount }}</td>
@@ -49,31 +46,27 @@
     </div>
 </div>
 
-<!-- Payment History Table -->
 <div class="table-card">
     <h3>Payment History</h3>
     <div class="table-responsive">
         <table class="data-table">
-            <thead>
-                <tr><th>Receipt</th><th>Amount</th><th>Date</th><th>Mode</th></tr>
-            </thead>
+            <thead><tr><th>Receipt</th><th>Amount</th><th>Date</th><th>Mode</th></tr></thead>
             <tbody>
                 {% for p in payments %}
                 <tr><td><a href="{% url 'gym_receipt' schema_name=tenant.schema_name receipt_id=p.id %}">{{ p.receipt_number }}</a></td><td>₹{{ p.amount }}</td><td>{{ p.payment_date|date:"Y-m-d" }}</td><td>{{ p.get_payment_mode_display }}</td></tr>
-                {% empty %}<tr><td colspan="4">No payments</td></tr>{% endfor %}
+                {% empty %}
+                <tr><td colspan="4">No payments</td></tr>
+                {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
 
-<!-- Attendance History -->
 <div class="table-card">
     <h3>Attendance History</h3>
     <div class="table-responsive">
         <table class="data-table" id="attendanceTable">
-            <thead>
-                <tr><th>Date</th><th>Check In</th><th>Check Out</th><th>Notes</th><th>Actions</th></tr>
-            </thead>
+            <thead><tr><th>Date</th><th>Check In</th><th>Check Out</th><th>Notes</th><th>Actions</th></tr></thead>
             <tbody>
                 {% for a in attendances %}
                 <tr data-att-id="{{ a.id }}">
@@ -214,7 +207,6 @@ let currentAttId = null;
 document.querySelectorAll('.edit-att-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
         currentAttId = btn.dataset.id;
-        // fetch current data
         const resp = await fetch(`/portal/${schema}/gym/attendance/${currentAttId}/edit/`);
         const data = await resp.json();
         if (data.error) { alert(data.error); return; }

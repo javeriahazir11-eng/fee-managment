@@ -1,37 +1,125 @@
 {% extends 'tenant/base.html' %}
+{% load static %}
 {% block title %}Attendance | {{ tenant.name }}{% endblock %}
 {% block body %}
 <div class="page-header">
     <div><h1 class="page-title">Daily Attendance</h1><p class="page-desc">Check-in / Check-out members (editable within 7 hours)</p></div>
-    <div class="header-stats"><div class="stat-badge"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg><span>Today: <strong>{{ checkins_today|length }}</strong> check-ins</span></div><button id="refreshBtn" class="btn-refresh">⟳ Refresh</button></div>
+    <div class="header-stats">
+        <div class="stat-badge"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg><span>Today: <strong id="todayCount">{{ checkins_today|length }}</strong> check-ins</span></div>
+        <button id="refreshBtn" class="btn-refresh">⟳ Refresh</button>
+    </div>
 </div>
 
 <div class="checkin-card">
     <div class="card-header"><h3>Quick Check-in</h3></div>
-    <form method="post" class="checkin-form" id="checkinForm">
-        {% csrf_token %}
-        <div class="form-row">
-            <div class="form-field"><label>Customer</label><div class="searchable-dropdown"><input type="text" id="customerSearch" placeholder="Type to search..." class="search-input"><select name="customer" id="customerSelect" style="display:none;">{{ form.customer }}</select></div></div>
-            <div class="form-field"><label>Check-out (optional)</label>{{ form.check_out }}</div>
-            <div class="form-field"><label>Notes</label>{{ form.notes }}</div>
-            <div class="form-field submit-field"><button type="submit" class="btn-primary">✔ Check In</button></div>
+    {% if customers_with_paid %}
+    <div class="form-row">
+        <div class="form-field">
+            <label>Customer (with paid subscription for {{ today|date:"F Y" }})</label>
+            <select id="customerSelect" class="customer-select">
+                <option value="">-- Select Customer --</option>
+                {% for c in customers_with_paid %}
+                    <option value="{{ c.id }}">{{ c.name }} ({{ c.phone }})</option>
+                {% endfor %}
+            </select>
         </div>
-    </form>
+        <div class="form-field submit-field">
+            <button id="checkinBtn" class="btn-primary">✔ Check In</button>
+        </div>
+    </div>
+    <div id="checkinMessage" class="info-message" style="display:none;"></div>
+    {% else %}
+    <div class="info-message warning">
+        <strong>⚠️ No customers with a paid subscription for {{ today|date:"F Y" }}.</strong><br>
+        Please follow these steps:<br>
+        1. Go to a customer's profile → <strong>Generate Subscription</strong> (choose months and fee).<br>
+        2. Then go to <strong>Collect Payment</strong> and pay the full amount.<br>
+        3. After that, the customer will appear here and can check in.
+    </div>
+    {% endif %}
 </div>
 
 <div class="attendance-grid">
-    <div class="attendance-card"><div class="card-header"><h3>Today's Check-ins</h3><div class="search-wrapper"><input type="text" id="todaySearch" placeholder="Search..." class="table-search"></div></div>
-        <div class="table-responsive"><table class="data-table" id="todayTable"><thead><tr><th>Customer</th><th>Check-in Time</th><th>Check-out</th><th>Action</th></tr></thead><tbody>{% for a in checkins_today %}<tr data-customer-name="{{ a.customer.name|lower }}"><td><strong>{{ a.customer.name }}</strong><br><small>{{ a.customer.phone }}</small></td><td>{{ a.check_in|time:"H:i" }}</td><td>{% if a.check_out %}{{ a.check_out|time:"H:i" }}{% else %}—{% endif %}</td><td>{% if not a.check_out %}<button class="btn-checkout" data-id="{{ a.customer.id }}">Check-out</button>{% endif %}</td></tr>{% empty %}<tr><td colspan="4">No check-ins today</td></tr>{% endfor %}</tbody></table></div>
+    <div class="attendance-card">
+        <div class="card-header"><h3>Today's Check-ins</h3><div class="search-wrapper"><input type="text" id="todaySearch" placeholder="Search..." class="table-search"></div></div>
+        <div class="table-responsive">
+            <table class="data-table" id="todayTable">
+                <thead><tr><th>Customer</th><th>Check-in Time</th><th>Check-out</th><th>Action</th></tr></thead>
+                <tbody id="todayTableBody">
+                    {% for a in checkins_today %}
+                    <tr data-customer-id="{{ a.customer.id }}" data-customer-name="{{ a.customer.name|lower }}">
+                        <td><strong>{{ a.customer.name }}</strong><br><small>{{ a.customer.phone }}</small></td>
+                        <td>{{ a.check_in|time:"H:i" }}</td>
+                        <td class="checkout-time">{% if a.check_out %}{{ a.check_out|time:"H:i" }}{% else %}—{% endif %}</td>
+                        <td>{% if not a.check_out %}<button class="btn-checkout" data-id="{{ a.customer.id }}">Check-out</button>{% endif %}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="empty-row">No check-ins today</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
-    <div class="attendance-card"><div class="card-header"><h3>Last 7 Days Attendance</h3><div class="search-wrapper"><input type="text" id="recentSearch" placeholder="Search..." class="table-search"></div></div>
-        <div class="table-responsive"><table class="data-table" id="recentTable"><thead><tr><th>Date</th><th>Customer</th><th>Check-in</th><th>Check-out</th><th>Edit</th></tr></thead><tbody>{% for a in recent_attendance %}<tr data-customer-name="{{ a.customer.name|lower }}"><td>{{ a.date|date:"Y-m-d" }}</td><td><strong>{{ a.customer.name }}</strong><br><small>{{ a.customer.phone }}</small></td><td>{{ a.check_in|time:"H:i" }}</td><td>{{ a.check_out|time:"H:i"|default:"-" }}</td><td>{% if a.is_editable %}<button class="edit-att-btn" data-id="{{ a.id }}">Edit</button>{% else %}Locked{% endif %}</td></tr>{% empty %}<tr><td colspan="5">No recent attendance</td></tr>{% endfor %}</tbody></table></div>
+    <div class="attendance-card">
+        <div class="card-header"><h3>Last 7 Days Attendance</h3><div class="search-wrapper"><input type="text" id="recentSearch" placeholder="Search..." class="table-search"></div></div>
+        <div class="table-responsive">
+            <table class="data-table" id="recentTable">
+                <thead><tr><th>Date</th><th>Customer</th><th>Check-in</th><th>Check-out</th><th>Edit</th></tr></thead>
+                <tbody>
+                    {% for a in recent_attendance %}
+                    <tr data-customer-name="{{ a.customer.name|lower }}">
+                        <td>{{ a.date|date:"Y-m-d" }}</td>
+                        <td><strong>{{ a.customer.name }}</strong><br><small>{{ a.customer.phone }}</small></td>
+                        <td>{{ a.check_in|time:"H:i" }}</td>
+                        <td>{{ a.check_out|time:"H:i"|default:"-" }}</td>
+                        <td>{% if a.is_editable %}<button class="edit-att-btn" data-id="{{ a.id }}">Edit</button>{% else %}Locked{% endif %}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="empty-row">No recent attendance</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 
 <div class="chart-card"><canvas id="attendanceTrend" height="100"></canvas></div>
 
 <!-- Attendance Edit Modal -->
-<div id="attEditModal" class="modal" style="display:none;"><div class="modal-content"><span class="close">&times;</span><h3>Edit Attendance</h3><form id="attEditForm">{% csrf_token %}<label>Check In:</label><input type="datetime-local" name="check_in" id="editCheckIn" required><label>Check Out:</label><input type="datetime-local" name="check_out" id="editCheckOut"><label>Notes:</label><textarea name="notes" id="editNotes" rows="2"></textarea><button type="submit">Save</button></form></div></div>
+<div id="attEditModal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <span class="close">&times;</span>
+        <h3>Edit Attendance</h3>
+        <form id="attEditForm">
+            {% csrf_token %}
+            <label>Check In:</label>
+            <input type="datetime-local" name="check_in" id="editCheckIn" required>
+            <label>Check Out:</label>
+            <input type="datetime-local" name="check_out" id="editCheckOut">
+            <label>Notes:</label>
+            <textarea name="notes" id="editNotes" rows="2"></textarea>
+            <button type="submit">Save Changes</button>
+        </form>
+    </div>
+</div>
+
+<!-- Debug Info (only if dropdown empty) -->
+{% if not customers_with_paid %}
+<div class="debug-card">
+    <details>
+        <summary>🔍 Debug Info – Why is the dropdown empty?</summary>
+        <p><strong>Current month:</strong> {{ today|date:"F Y" }}</p>
+        <p><strong>Active customers in database:</strong> {{ total_active_customers }} – <a href="{% url 'gym_customer_list' schema_name=tenant.schema_name %}">view list</a></p>
+        <p><strong>To enable check-in for a customer, you must:</strong></p>
+        <ol>
+            <li>Have a <strong>GymSubscription</strong> record for <strong>{{ today|date:"F Y" }}</strong> with status = "paid".</li>
+            <li>You can generate a subscription from the customer's profile, then collect payment.</li>
+        </ol>
+        <p><em>For quick testing, run:</em></p>
+        <pre>python3 manage.py force_paid_subscription --tenant={{ tenant.schema_name }} --customer_id=1 --amount=500</pre>
+    </details>
+</div>
+{% endif %}
 
 <style>
 .modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; z-index:1000; }
@@ -42,6 +130,27 @@
 .modal-content input, .modal-content textarea { padding:0.5rem; border-radius:0.5rem; border:1px solid var(--border); background: var(--surface-alt); }
 .btn-checkout { background: var(--danger); color:white; border:none; border-radius:2rem; padding:0.2rem 0.8rem; cursor:pointer; }
 .edit-att-btn { background: var(--primary); color:white; border:none; border-radius:2rem; padding:0.2rem 0.8rem; cursor:pointer; }
+.header-stats { display: flex; gap: 1rem; align-items: center; }
+.stat-badge { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: var(--surface-alt); border-radius: 2rem; border: 1px solid var(--border); font-size: 0.85rem; }
+.btn-refresh { background: var(--primary); color: white; border: none; border-radius: 2rem; padding: 0.3rem 0.8rem; cursor: pointer; }
+.checkin-card, .attendance-card, .chart-card, .debug-card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); padding: 1rem; margin-bottom: 1rem; }
+.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.form-row { display: flex; gap: 1rem; align-items: flex-end; }
+.form-field { flex: 1; }
+.form-field label { font-weight: 600; font-size: 0.8rem; display: block; margin-bottom: 0.25rem; }
+.customer-select, .form-field input { width: 100%; padding: 0.5rem; border-radius: 0.5rem; border: 1px solid var(--border); background: var(--surface-alt); }
+.submit-field { flex: 0 0 auto; }
+.btn-primary { background: var(--primary); color: white; border: none; border-radius: 2rem; padding: 0.5rem 1rem; cursor: pointer; }
+.attendance-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1rem; }
+.table-responsive { overflow-x: auto; }
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th, .data-table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+.data-table th { background: var(--surface-alt); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+.info-message { background: #fff3cd; padding: 0.75rem; border-radius: 0.5rem; margin-top: 1rem; color: #856404; border-left: 4px solid #ffc107; }
+.info-message.warning { background: #f8d7da; color: #721c24; border-left-color: #dc3545; }
+.debug-card details { font-size: 0.85rem; }
+.debug-card pre { background: #f4f4f4; padding: 0.5rem; border-radius: 4px; overflow-x: auto; }
+.empty-row { text-align: center; padding: 2rem; color: var(--muted); }
 </style>
 
 <script>
@@ -49,47 +158,177 @@ function getCookie(name){let v=null;if(document.cookie&&document.cookie!==''){co
 const csrftoken=getCookie('csrftoken');
 const schema="{{ tenant.schema_name }}";
 
-// Refresh
+// Refresh page
 document.getElementById('refreshBtn').onclick=()=>location.reload();
 
-// Customer search dropdown
-const custSearch=document.getElementById('customerSearch');
-const custSelect=document.getElementById('customerSelect');
-if(custSearch&&custSelect){
-    const options=Array.from(custSelect.options);
-    const dropdown=document.createElement('div');
-    dropdown.className='customer-select';
-    dropdown.style.display='none';
-    custSearch.parentNode.appendChild(dropdown);
-    function updateDropdown(filter=''){
-        dropdown.innerHTML='';
-        const filtered=options.filter(opt=>opt.text.toLowerCase().includes(filter.toLowerCase())&&opt.value);
-        if(filtered.length===0){const no=document.createElement('div');no.textContent='No customers';no.style.padding='0.5rem';dropdown.appendChild(no);}
-        else filtered.forEach(opt=>{const item=document.createElement('div');item.textContent=opt.text;item.style.padding='0.5rem';item.style.cursor='pointer';item.onclick=()=>{custSearch.value=opt.text;custSelect.value=opt.value;dropdown.style.display='none';};dropdown.appendChild(item);});
-        dropdown.style.display='block';
+// Check-in via AJAX
+document.getElementById('checkinBtn')?.addEventListener('click', async function() {
+    const select = document.getElementById('customerSelect');
+    const customerId = select.value;
+    if (!customerId) {
+        alert('Please select a customer');
+        return;
     }
-    custSearch.addEventListener('input',e=>updateDropdown(e.target.value));
-    custSearch.addEventListener('focus',()=>updateDropdown(custSearch.value));
-    document.addEventListener('click',e=>{if(!dropdown.contains(e.target)&&e.target!==custSearch)dropdown.style.display='none';});
-    document.getElementById('checkinForm').addEventListener('submit',e=>{if(!custSelect.value&&custSearch.value){const match=options.find(opt=>opt.text===custSearch.value);if(match)custSelect.value=match.value;else{e.preventDefault();alert('Select valid customer');}}});
+    const btn = this;
+    btn.disabled = true;
+    btn.innerText = 'Checking...';
+    const msgDiv = document.getElementById('checkinMessage');
+    try {
+        const resp = await fetch('/api/gym/checkin/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrftoken, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `customer_id=${customerId}`
+        });
+        const data = await resp.json();
+        if (data.error) {
+            msgDiv.style.display = 'block';
+            msgDiv.innerHTML = `<strong>Error:</strong> ${data.error}`;
+            msgDiv.className = 'info-message warning';
+        } else {
+            msgDiv.style.display = 'block';
+            msgDiv.innerHTML = `<strong>✅ ${data.message}</strong>`;
+            msgDiv.className = 'info-message';
+            // Add new row to Today's Check-ins table
+            const tbody = document.getElementById('todayTableBody');
+            const emptyRow = tbody.querySelector('.empty-row');
+            if (emptyRow) emptyRow.remove();
+            const newRow = document.createElement('tr');
+            newRow.setAttribute('data-customer-id', customerId);
+            newRow.setAttribute('data-customer-name', data.customer_name.toLowerCase());
+            newRow.innerHTML = `
+                <td><strong>${data.customer_name}</strong><br><small>${data.customer_phone}</small></td>
+                <td>${data.check_in_time}</td>
+                <td class="checkout-time">—</td>
+                <td><button class="btn-checkout" data-id="${customerId}">Check-out</button></td>
+            `;
+            tbody.appendChild(newRow);
+            // Update count
+            document.getElementById('todayCount').innerText = tbody.children.length;
+            // Remove customer from dropdown
+            select.querySelector(`option[value="${customerId}"]`).remove();
+            if (select.options.length === 1) {
+                // No more customers
+                const card = document.querySelector('.checkin-card');
+                card.innerHTML = '<div class="info-message warning">No more customers with paid subscription for today.</div>';
+            }
+            // Attach checkout event to the new button
+            newRow.querySelector('.btn-checkout')?.addEventListener('click', checkoutHandler);
+        }
+    } catch(e) {
+        msgDiv.style.display = 'block';
+        msgDiv.innerHTML = `<strong>Error:</strong> ${e.message}`;
+        msgDiv.className = 'info-message warning';
+    } finally {
+        btn.disabled = false;
+        btn.innerText = '✔ Check In';
+        setTimeout(() => { msgDiv.style.display = 'none'; }, 3000);
+    }
+});
+
+// Checkout handler (shared)
+async function checkoutHandler(event) {
+    const btn = event.currentTarget;
+    const customerId = btn.dataset.id;
+    if (!confirm('Check out now?')) return;
+    btn.disabled = true;
+    btn.innerText = '...';
+    try {
+        const resp = await fetch('/api/gym/checkout/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrftoken, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `customer_id=${customerId}`
+        });
+        const data = await resp.json();
+        if (data.error) {
+            alert(data.error);
+        } else {
+            alert(data.message);
+            // Update the row: remove checkout button, set checkout time
+            const row = btn.closest('tr');
+            const checkoutCell = row.querySelector('.checkout-time');
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            checkoutCell.innerText = timeStr;
+            btn.remove();
+        }
+    } catch(e) {
+        alert('Error: ' + e.message);
+    } finally {
+        btn.disabled = false;
+    }
 }
 
-// Checkout
-document.querySelectorAll('.btn-checkout').forEach(btn=>btn.addEventListener('click',async function(){const id=this.dataset.id;if(!confirm('Check out?'))return;this.disabled=true;this.innerText='...';try{const resp=await fetch('/api/gym/checkout/',{method:'POST',headers:{'X-CSRFToken':csrftoken,'Content-Type':'application/x-www-form-urlencoded'},body:`customer_id=${id}`});const data=await resp.json();alert(data.message);location.reload();}catch(e){alert(e.message);this.disabled=false;this.innerText='Check-out';}}));
+// Attach checkout to existing buttons
+document.querySelectorAll('.btn-checkout').forEach(btn => btn.addEventListener('click', checkoutHandler));
 
 // Table search
-document.getElementById('todaySearch')?.addEventListener('keyup',function(){const filter=this.value.toLowerCase();document.querySelectorAll('#todayTable tbody tr').forEach(row=>{const name=row.getAttribute('data-customer-name')||'';row.style.display=name.includes(filter)?'':'none';});});
-document.getElementById('recentSearch')?.addEventListener('keyup',function(){const filter=this.value.toLowerCase();document.querySelectorAll('#recentTable tbody tr').forEach(row=>{const name=row.getAttribute('data-customer-name')||'';row.style.display=name.includes(filter)?'':'none';});});
+document.getElementById('todaySearch')?.addEventListener('keyup', function() {
+    const filter = this.value.toLowerCase();
+    document.querySelectorAll('#todayTable tbody tr').forEach(row => {
+        const name = row.getAttribute('data-customer-name') || '';
+        row.style.display = name.includes(filter) ? '' : 'none';
+    });
+});
+document.getElementById('recentSearch')?.addEventListener('keyup', function() {
+    const filter = this.value.toLowerCase();
+    document.querySelectorAll('#recentTable tbody tr').forEach(row => {
+        const name = row.getAttribute('data-customer-name') || '';
+        row.style.display = name.includes(filter) ? '' : 'none';
+    });
+});
 
-// Attendance edit modal
-const attModal=document.getElementById('attEditModal');
-let currentAttId=null;
-document.querySelectorAll('.edit-att-btn').forEach(btn=>btn.addEventListener('click',async function(){currentAttId=this.dataset.id;const resp=await fetch(`/portal/${schema}/gym/attendance/${currentAttId}/edit/`);const data=await resp.json();if(data.error)alert(data.error);else{document.getElementById('editCheckIn').value=data.check_in.slice(0,16);document.getElementById('editCheckOut').value=data.check_out?data.check_out.slice(0,16):'';document.getElementById('editNotes').value=data.notes;attModal.style.display='flex';}}));
-attModal.querySelector('.close').onclick=()=>attModal.style.display='none';
-document.getElementById('attEditForm').onsubmit=async(e)=>{e.preventDefault();const formData=new FormData(e.target);const btn=attModal.querySelector('button[type="submit"]');btn.disabled=true;try{const resp=await fetch(`/portal/${schema}/gym/attendance/${currentAttId}/edit/`,{method:'POST',headers:{'X-CSRFToken':csrftoken},body:formData});const data=await resp.json();if(data.message)alert(data.message);else if(data.errors)alert('Error: '+JSON.stringify(data.errors));if(!data.error)location.reload();}catch(e){alert(e.message);}finally{btn.disabled=false;attModal.style.display='none';}};
+// Attendance edit modal (unchanged, works with existing backend)
+const attModal = document.getElementById('attEditModal');
+let currentAttId = null;
+document.querySelectorAll('.edit-att-btn').forEach(btn => btn.addEventListener('click', async function() {
+    currentAttId = this.dataset.id;
+    const resp = await fetch(`/portal/${schema}/gym/attendance/${currentAttId}/edit/`);
+    const data = await resp.json();
+    if (data.error) alert(data.error);
+    else {
+        document.getElementById('editCheckIn').value = data.check_in.slice(0,16);
+        document.getElementById('editCheckOut').value = data.check_out ? data.check_out.slice(0,16) : '';
+        document.getElementById('editNotes').value = data.notes;
+        attModal.style.display = 'flex';
+    }
+}));
+attModal.querySelector('.close').onclick = () => attModal.style.display = 'none';
+document.getElementById('attEditForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const btn = attModal.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    try {
+        const resp = await fetch(`/portal/${schema}/gym/attendance/${currentAttId}/edit/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrftoken },
+            body: formData
+        });
+        const data = await resp.json();
+        if (data.message) alert(data.message);
+        else if (data.errors) alert('Error: ' + JSON.stringify(data.errors));
+        if (!data.error) location.reload();
+    } catch(e) { alert(e.message); }
+    finally { btn.disabled = false; attModal.style.display = 'none'; }
+};
 
-// Chart
-const ctx=document.getElementById('attendanceTrend')?.getContext('2d');
-if(ctx){const last7Days={};document.querySelectorAll('#recentTable tbody tr').forEach(row=>{const dateCell=row.cells[0];if(dateCell){const date=dateCell.innerText;last7Days[date]=(last7Days[date]||0)+1;}});const dates=Object.keys(last7Days).sort().slice(-7);const counts=dates.map(d=>last7Days[d]);new Chart(ctx,{type:'line',data:{labels:dates,datasets:[{label:'Check-ins',data:counts,borderColor:'#3b82f6',fill:true}]}});}
+// Chart for last 7 days trend
+const ctx = document.getElementById('attendanceTrend')?.getContext('2d');
+if(ctx) {
+    const last7Days = {};
+    document.querySelectorAll('#recentTable tbody tr').forEach(row => {
+        const dateCell = row.cells[0];
+        if(dateCell) {
+            const date = dateCell.innerText;
+            last7Days[date] = (last7Days[date] || 0) + 1;
+        }
+    });
+    const dates = Object.keys(last7Days).sort().slice(-7);
+    const counts = dates.map(d => last7Days[d]);
+    new Chart(ctx, {
+        type: 'line',
+        data: { labels: dates, datasets: [{ label: 'Check-ins', data: counts, borderColor: '#3b82f6', fill: true }] }
+    });
+}
 </script>
 {% endblock %}

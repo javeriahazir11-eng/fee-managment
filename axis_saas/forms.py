@@ -1,4 +1,5 @@
 from django import forms
+from django.db import models
 from .models import Student, FeeStructure, PaymentTransaction, SchoolFeeSettings, GymCustomer, GymAttendance
 
 class StudentForm(forms.ModelForm):
@@ -17,10 +18,6 @@ class FeeCollectionForm(forms.Form):
     amount = forms.DecimalField(max_digits=10, decimal_places=2, label="Amount (₹)")
     payment_mode = forms.ChoiceField(choices=PaymentTransaction.PAYMENT_MODE_CHOICES, label="Payment Mode")
     remarks = forms.CharField(required=False, widget=forms.Textarea(attrs={'rows': 2}), label="Remarks")
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields['student'].queryset = Student.objects.all()
 
 class FeeStructureForm(forms.ModelForm):
     class Meta:
@@ -68,10 +65,10 @@ class GymAttendanceForm(forms.Form):
     notes = forms.CharField(required=False, widget=forms.Textarea(attrs={'rows': 2}))
 
     def __init__(self, *args, **kwargs):
-        from .models import GymCustomer
         super().__init__(*args, **kwargs)
+        from .models import GymCustomer
+        # Show all active customers (subscription validation is done in API)
         self.fields['customer'].queryset = GymCustomer.objects.filter(status='active')
-
 class GymPaymentForm(forms.Form):
     customer = forms.ModelChoiceField(queryset=None, label="Customer")
     amount = forms.DecimalField(max_digits=10, decimal_places=2, label="Amount (₹)")
@@ -79,10 +76,10 @@ class GymPaymentForm(forms.Form):
     remarks = forms.CharField(required=False, widget=forms.Textarea(attrs={'rows': 2}))
 
     def __init__(self, *args, **kwargs):
-        from .models import GymCustomer
         super().__init__(*args, **kwargs)
+        from .models import GymCustomer
+        # Show all active customers (payment logic handles pending check)
         self.fields['customer'].queryset = GymCustomer.objects.filter(status='active')
-
 class GymSettingsForm(forms.ModelForm):
     class Meta:
         from .models import GymSettings
