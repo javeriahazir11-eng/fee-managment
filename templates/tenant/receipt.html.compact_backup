@@ -1,5 +1,5 @@
 {% extends 'tenant/base.html' %}
-{% block title %}Fee Receipt | {{ tenant.name }}{% endblock %}
+{% block title %}Receipt {{ payment.receipt_number }}{% endblock %}
 
 {% block body %}
 <div style="display: flex; justify-content: center; align-items: center; min-height: 80vh;">
