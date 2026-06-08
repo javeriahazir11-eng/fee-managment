@@ -1,125 +1,90 @@
 #!/usr/bin/env python3
 """
-AXIS Gym Color Scheme Patcher
-Replaces blue (#3b82f6) with orange (#f97316) for gym tenant only.
-Run: python3 gym_color_patcher.py
+Add 50 more Pakistani students to the ilama tenant.
+Run: python3 add_50_students.py
 """
+import os
+import random
+from decimal import Decimal
 
-import re
-from pathlib import Path
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'axis_saas.settings')
+import django
+django.setup()
 
-BASE_HTML = Path("templates/tenant/base.html")
-GYM_RECEIPT = Path("templates/tenant/gym_receipt.html")
+from django_tenants.utils import schema_context
+from axis_saas.models import SchoolClient, Student, FeeStructure
+from faker import Faker
 
-def patch_base_html():
-    """Add tenant-type body class and gym-specific CSS override."""
-    if not BASE_HTML.exists():
-        print(f"❌ {BASE_HTML} not found. Run from project root.")
-        return False
+fake = Faker('en_PK')
 
-    content = BASE_HTML.read_text(encoding="utf-8")
+GRADES = ['Nursery', 'KG', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10']
+SECTIONS = ['A', 'B', 'C', 'D']
+STATUSES = ['active', 'active', 'active', 'active', 'suspended', 'graduated']
 
-    # 1. Add class to <body> tag if not already present
-    if 'class="tenant-{{ tenant.tenant_type }}"' not in content:
-        content = re.sub(r'<body([^>]*)>', r'<body\1 class="tenant-{{ tenant.tenant_type }}">', content, count=1)
-        print("✅ Added tenant-type class to <body>")
-    else:
-        print("ℹ️ Body class already present")
+def generate_cnic():
+    """Generate a 13-digit Pakistani CNIC (no dashes)."""
+    return f"{random.randint(30000, 42999)}{random.randint(1000000, 9999999)}{random.randint(1,9)}"
 
-    # 2. Inject gym color override block (only if not already there)
-    override_block = """
-    <!-- GYM COLOR OVERRIDE (injected by patcher) -->
-    <style>
-        .tenant-gym {
-            --primary: #f97316;
-            --primary-dark: #ea580c;
-            --primary-light: #fdba74;
-            --primary-bg: rgba(249,115,22,0.1);
-        }
-        /* Ensure gradient texts use new primary colors */
-        .tenant-gym .page-title,
-        .tenant-gym .school-info h2,
-        .tenant-gym .summary-value {
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-        }
-        /* Fix stats card icon color on gym */
-        .tenant-gym .kpi-icon {
-            color: var(--primary);
-        }
-        .tenant-gym .btn-primary {
-            background: var(--primary);
-        }
-        .tenant-gym .btn-primary:hover {
-            background: var(--primary-dark);
-        }
-        .tenant-gym .stat-badge[style*="background: var(--primary)"] {
-            background: var(--primary) !important;
-        }
-        .tenant-gym .quick-filter-btn.active,
-        .tenant-gym .tab.active {
-            background: var(--primary);
-        }
-    </style>
-    """
-    if override_block not in content:
-        # Insert before closing </head> or after existing style block
-        if "</head>" in content:
-            content = content.replace("</head>", f"{override_block}\n</head>")
-        else:
-            content += f"\n{override_block}\n"
-        print("✅ Added gym CSS override block")
-    else:
-        print("ℹ️ CSS override already present")
+def generate_phone():
+    """Generate a valid Pakistani mobile number (max 13 digits)."""
+    # Format: 03xx-xxxxxxx (12 digits) or 03xxxxxxxxx (11 digits)
+    phone = f"03{random.randint(0, 9)}{random.randint(0, 9)}-{random.randint(1000000, 9999999)}"
+    # Remove dash if we want pure digits, but keep dash for readability; total length 13 including dash
+    if len(phone) > 15:
+        phone = phone.replace('-', '')[:15]
+    return phone
 
-    BASE_HTML.write_text(content, encoding="utf-8")
-    return True
-
-
-def patch_gym_receipt():
-    """Ensure gym_receipt uses CSS variables instead of hardcoded orange."""
-    if not GYM_RECEIPT.exists():
-        print(f"⚠️ {GYM_RECEIPT} not found – skipping")
+def add_students(schema_name, count=50):
+    try:
+        tenant = SchoolClient.objects.get(schema_name=schema_name)
+    except SchoolClient.DoesNotExist:
+        print(f"❌ Tenant '{schema_name}' not found.")
         return
 
-    content = GYM_RECEIPT.read_text(encoding="utf-8")
+    with schema_context(schema_name):
+        # Ensure fee structures exist
+        for grade in GRADES:
+            FeeStructure.objects.get_or_create(grade=grade, defaults={'monthly_fee': Decimal('500.00')})
 
-    # Replace hardcoded gym header border color with variable
-    content = re.sub(
-        r'border-bottom-color:\s*#f97316;',
-        'border-bottom-color: var(--primary);',
-        content
-    )
-    content = re.sub(
-        r'background:\s*#f97316;',
-        'background: var(--primary);',
-        content
-    )
-    content = re.sub(
-        r'background:\s*linear-gradient\(135deg,\s*#f97316,\s*#ea580c\);',
-        'background: linear-gradient(135deg, var(--primary), var(--primary-dark));',
-        content
-    )
+        # Find current max roll number
+        max_roll = 0
+        for r in Student.objects.values_list('roll_number', flat=True):
+            if r and r.isdigit():
+                max_roll = max(max_roll, int(r))
+        next_roll = max_roll + 1
 
-    # Also fix any possible hardcoded blue leftovers
-    content = re.sub(r'#3b82f6', 'var(--primary)', content)
-    content = re.sub(r'#2563eb', 'var(--primary-dark)', content)
+        students_to_create = []
+        for _ in range(count):
+            first_name = fake.first_name()
+            last_name = fake.last_name()
+            name = f"{first_name} {last_name}"
+            father_name = f"{fake.first_name_male()} {last_name}"
+            grade = random.choice(GRADES)
+            section = random.choice(SECTIONS)
+            fee_struct = FeeStructure.objects.filter(grade=grade).first()
+            custom_fee = fee_struct.monthly_fee if fee_struct else Decimal('0')
 
-    GYM_RECEIPT.write_text(content, encoding="utf-8")
-    print("✅ Updated gym_receipt.html to use CSS variables")
+            student = Student(
+                name=name,
+                father_name=father_name,
+                father_cnic=generate_cnic(),
+                parent_mobile=generate_phone(),
+                grade=grade,
+                section=section,
+                admission_date=fake.date_between(start_date='-3y', end_date='today'),
+                status=random.choice(STATUSES),
+                gender=random.choice(['male', 'female']),
+                date_of_birth=fake.date_of_birth(minimum_age=4, maximum_age=18),
+                address=fake.address(),
+                notes="Auto‑generated for demo video",
+                custom_fee=custom_fee,
+                roll_number=str(next_roll)
+            )
+            students_to_create.append(student)
+            next_roll += 1
 
+        Student.objects.bulk_create(students_to_create)
+        print(f"✅ Added {count} Pakistani students to '{schema_name}'. Total students now: {Student.objects.count()}")
 
-def main():
-    print("🎨 AXIS Gym Color Patcher – Replacing blue with orange for gym only")
-    if patch_base_html():
-        patch_gym_receipt()
-        print("\n✨ Done! The gym portal will now use a fresh orange color scheme.")
-        print("   School portal remains blue. No manual changes needed.")
-    else:
-        print("\n❌ Patcher failed – please run from the root of your Django project.")
-
-
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    add_students('ilama', 50)

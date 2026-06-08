@@ -99,6 +99,7 @@ def student_list(request, schema_name):
     grade = request.GET.get('grade', '')
     section = request.GET.get('section', '')
     status = request.GET.get('status', '')
+    page_number = request.GET.get('page', 1)
     with schema_context(schema_name):
         students = Student.objects.all()
         if query:
@@ -111,21 +112,28 @@ def student_list(request, schema_name):
         if section: students = students.filter(section=section)
         if status: students = students.filter(status=status)
         students = students.order_by('-enrolled_on')
+        # Annotate pending amount
         for s in students:
             s.pending_amount = sum(fr.remaining for fr in s.fee_records.filter(status__in=['pending', 'partial', 'overdue']))
+        # Paginate
+        from django.core.paginator import Paginator
+        paginator = Paginator(students, 20)
+        page_obj = paginator.get_page(page_number)
         grades = Student.objects.values_list('grade', flat=True).distinct().order_by('grade')
         grades = list(grades)
         sections = Student.objects.values_list('section', flat=True).distinct().order_by('section')
         sections = list(sections)
         status_choices = Student.STATUS_CHOICES
     context = {
-        'tenant': tenant, 'students': students, 'grades': grades, 'sections': sections,
-        'status_choices': status_choices, 'search_query': query,
+        'tenant': tenant,
+        'students': page_obj,          # page object, not the full queryset
+        'grades': grades,
+        'sections': sections,
+        'status_choices': status_choices,
+        'search_query': query,
         'logo_url': tenant.school_logo.url if tenant.school_logo else None,
     }
     return render(request, 'tenant/student_list.html', context)
-
-# ------------------- Student Profile -------------------
 @require_tenant_type(['school'])
 def student_profile(request, schema_name, student_id):
     tenant = get_tenant(request, schema_name)
@@ -731,16 +739,19 @@ def manual_generate_api(request):
         today = timezone.localdate()
         month = today.month
         year = today.year
-        existing = FeeRecord.objects.filter(month=month, year=year)
-        if existing.exists():
-            return JsonResponse({"message": f"Fee records for {month}/{year} already exist. ({existing.count()} records)"})
         students = Student.objects.filter(status="active")
         if not students.exists():
-            return JsonResponse({"message": "No active students found. Please add students first."})
+            return JsonResponse({"message": "No active students found."})
         due_date = today + timedelta(days=settings.due_date_offset)
         created = 0
+        skipped_existing = 0
         skipped_no_fee = 0
         for student in students:
+            # Check if already has fee record for this month
+            existing = FeeRecord.objects.filter(student=student, month=month, year=year).first()
+            if existing:
+                skipped_existing += 1
+                continue
             base_fee = student.custom_fee if student.custom_fee > 0 else 0
             if base_fee == 0:
                 fee_struct = FeeStructure.objects.filter(grade=student.grade).first()
@@ -749,21 +760,19 @@ def manual_generate_api(request):
                     student.custom_fee = base_fee
                     student.save(update_fields=["custom_fee"])
             if base_fee > 0:
-                obj, is_new = FeeRecord.objects.get_or_create(
+                FeeRecord.objects.create(
                     student=student, month=month, year=year,
-                    defaults={"amount": base_fee, "due_date": due_date, "status": "pending"}
+                    amount=base_fee, due_date=due_date, status="pending"
                 )
-                if is_new:
-                    created += 1
+                created += 1
             else:
                 skipped_no_fee += 1
         message = f"Generated {created} fee records for {month}/{year}."
+        if skipped_existing > 0:
+            message += f" Skipped {skipped_existing} students because they already have a fee record."
         if skipped_no_fee > 0:
             message += f" Skipped {skipped_no_fee} students because no fee structure defined for their grade."
-        return JsonResponse({"message": message, "created": created, "skipped": skipped_no_fee})
-
-
-# ------------------- API: Manual Generate for Single Student -------------------
+        return JsonResponse({"message": message, "created": created, "skipped_existing": skipped_existing, "skipped_no_fee": skipped_no_fee})
 @csrf_exempt
 @require_http_methods(["POST"])
 
