@@ -1,0 +1,171 @@
+{% extends 'tenant/base.html' %}
+{% block title %}Collect Fee | {{ student.name }} | {{ tenant.name }}{% endblock %}
+
+{% block body %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Collect Fee</h1>
+        <p class="page-desc">{{ student.name }} ({{ student.roll_number }})</p>
+    </div>
+    <div class="header-actions">
+        <a href="{% url 'fee_collection' schema_name=tenant.schema_name %}" class="btn-secondary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 18l-6-6 6-6"/></svg>
+            Back to List
+        </a>
+    </div>
+</div>
+
+<div class="student-panel">
+    <div class="student-info">
+        <div class="student-avatar">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+        </div>
+        <div>
+            <h3>{{ student.name }} <span class="roll">({{ student.roll_number }})</span></h3>
+            <p class="class-info">{{ student.grade }} - {{ student.section }} | Father: {{ student.father_name }} | CNIC: {{ student.father_cnic }}</p>
+        </div>
+        <div class="pending-badge">Pending: ₹{{ total_pending }}</div>
+    </div>
+
+    <form method="post" class="payment-form" id="paymentForm">
+        {% csrf_token %}
+        <input type="hidden" name="student_id" value="{{ student.id }}">
+        <div class="form-row">
+            <div class="form-field">
+                <label>Amount Received (₹)</label>
+                <input type="number" name="amount" id="amountInput" step="0.01" required placeholder="Enter amount">
+            </div>
+            <div class="form-field">
+                <label>Payment Mode</label>
+                <select name="payment_mode">
+                    <option value="cash">Cash</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="cheque">Cheque</option>
+                    <option value="online">Online</option>
+                </select>
+            </div>
+            <div class="form-field">
+                <label>Remaining After Payment</label>
+                <input type="text" id="remainingAfter" readonly placeholder="Will be calculated">
+            </div>
+            <div class="form-field submit-field">
+                <button type="submit" class="btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
+                    Process Payment
+                </button>
+            </div>
+        </div>
+    </form>
+
+    <div class="pending-table">
+        <h4>Pending Fee Records</h4>
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr><th>Month/Year</th><th>Amount (₹)</th><th>Paid (₹)</th><th>Remaining (₹)</th><th>Due Date</th></tr>
+                </thead>
+                <tbody>
+                    {% for r in pending_records %}
+                    <tr>
+                        <td>{{ r.month }}/{{ r.year }}</td>
+                        <td>₹{{ r.amount }}</td>
+                        <td>₹{{ r.paid_amount }}</td>
+                        <td class="remaining">₹{{ r.remaining }}</td>
+                        <td>{{ r.due_date|date:"Y-m-d" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr id="noPendingRow">
+                        <td colspan="5" class="empty-row">
+                            No pending fees for this student.
+                            <button type="button" class="btn-generate" id="generateSingleBtn">Generate Current Month Fee</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% if pending_records %}
+                    <tr class="total-row">
+                        <td colspan="3"><strong>Total Pending</strong></td>
+                        <td colspan="2"><strong>₹<span id="totalPending">{{ total_pending }}</span></strong></td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+.student-panel { margin-top: 0; }
+.student-info { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; background: var(--surface-alt); padding: 1rem; border-radius: var(--radius); margin-bottom: 1rem; }
+.student-avatar { width: 48px; height: 48px; background: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; }
+.pending-badge { background: var(--danger); color: white; padding: 0.25rem 0.75rem; border-radius: 2rem; font-weight: 600; }
+.payment-form { padding: 1rem; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); margin-bottom: 1rem; }
+.form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+.form-field { display: flex; flex-direction: column; gap: 0.25rem; }
+.form-field label { font-weight: 600; font-size: 0.8rem; }
+.form-field input, .form-field select { padding: 0.6rem; border-radius: 0.5rem; border: 1px solid var(--border); background: var(--surface-alt); }
+.submit-field { justify-content: flex-end; display: flex; flex-direction: column; }
+.pending-table { margin-top: 1rem; }
+.total-row { background: var(--surface-alt); font-weight: 600; }
+.remaining { font-weight: 700; color: var(--danger); }
+.btn-generate { background: var(--primary); color: white; border: none; border-radius: 2rem; padding: 0.3rem 0.8rem; margin-top: 0.5rem; cursor: pointer; }
+.empty-row { text-align: center; padding: 1.5rem; color: var(--muted); }
+</style>
+
+<script>
+function getCookie(name) {
+    let value = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                value = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return value;
+}
+const csrfToken = getCookie('csrftoken');
+const schema = '{{ tenant.schema_name }}';
+const studentId = {{ student.id }};
+const totalPendingSpan = document.getElementById('totalPending');
+const amountInput = document.getElementById('amountInput');
+const remainingSpan = document.getElementById('remainingAfter');
+if (amountInput && totalPendingSpan) {
+    const total = parseFloat(totalPendingSpan.innerText);
+    amountInput.addEventListener('input', function() {
+        const paid = parseFloat(this.value) || 0;
+        const remaining = total - paid;
+        remainingSpan.value = remaining > 0 ? `₹${remaining.toFixed(2)}` : '₹0.00';
+    });
+    amountInput.dispatchEvent(new Event('input'));
+}
+
+// Generate single fee for current month
+const generateSingleBtn = document.getElementById('generateSingleBtn');
+if (generateSingleBtn) {
+    generateSingleBtn.addEventListener('click', async () => {
+        if (!confirm(`Generate current month fee for {{ student.name }}?`)) return;
+        generateSingleBtn.disabled = true;
+        generateSingleBtn.innerHTML = 'Generating...';
+        try {
+            const resp = await fetch(`/api/manual-generate-single/?student_id=${studentId}`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+            });
+            const data = await resp.json();
+            if (data.message) alert(data.message);
+            else if (data.error) alert('Error: ' + data.error);
+            location.reload();
+        } catch(e) {
+            console.error('Generation error:', e);
+            alert('Error generating fee: ' + e.message);
+        } finally {
+            generateSingleBtn.disabled = false;
+            generateSingleBtn.innerHTML = 'Generate Current Month Fee';
+        }
+    });
+}
+</script>
+{% endblock %}

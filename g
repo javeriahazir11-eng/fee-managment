@@ -1,90 +1,75 @@
 #!/usr/bin/env python3
 """
-Add 50 more Pakistani students to the ilama tenant.
-Run: python3 add_50_students.py
+axis_local_fix.py - Local development fix for ALLOWED_HOSTS & DEBUG
+Run: python3 axis_local_fix.py
 """
 import os
-import random
-from decimal import Decimal
+import re
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'axis_saas.settings')
-import django
-django.setup()
+SETTINGS_FILE = "axis_saas/settings.py"
 
-from django_tenants.utils import schema_context
-from axis_saas.models import SchoolClient, Student, FeeStructure
-from faker import Faker
+def patch_settings():
+    if not os.path.exists(SETTINGS_FILE):
+        print(f"❌ {SETTINGS_FILE} not found!")
+        return False
 
-fake = Faker('en_PK')
+    with open(SETTINGS_FILE, "r") as f:
+        content = f.read()
 
-GRADES = ['Nursery', 'KG', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10']
-SECTIONS = ['A', 'B', 'C', 'D']
-STATUSES = ['active', 'active', 'active', 'active', 'suspended', 'graduated']
+    # 1. Fix ALLOWED_HOSTS line
+    # Replace current line with safe version: if no env var, default to ['*']
+    # Also add localhost and 127.0.0.1 when DEBUG is True
+    old_allowed = r"ALLOWED_HOSTS = os\.environ\.get\('ALLOWED_HOSTS', ''\)\.split\(','\) or \['\*'\]"
+    new_allowed = """ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',') if os.environ.get('ALLOWED_HOSTS') else ['*']
+# Auto-add local development hosts when DEBUG is True
+if DEBUG:
+    ALLOWED_HOSTS += ['127.0.0.1', 'localhost']"""
 
-def generate_cnic():
-    """Generate a 13-digit Pakistani CNIC (no dashes)."""
-    return f"{random.randint(30000, 42999)}{random.randint(1000000, 9999999)}{random.randint(1,9)}"
+    if re.search(old_allowed, content):
+        content = re.sub(old_allowed, new_allowed, content)
+        print("✅ Fixed ALLOWED_HOSTS logic")
+    else:
+        # Fallback: try to find line and replace manually
+        lines = content.splitlines()
+        for i, line in enumerate(lines):
+            if line.strip().startswith("ALLOWED_HOSTS ="):
+                lines[i] = new_allowed.splitlines()[0]
+                # Insert the DEBUG conditional after this line
+                indent = line[:len(line)-len(line.lstrip())]
+                lines.insert(i+1, f"{indent}# Auto-add local development hosts when DEBUG is True")
+                lines.insert(i+2, f"{indent}if DEBUG:")
+                lines.insert(i+3, f"{indent}    ALLOWED_HOSTS += ['127.0.0.1', 'localhost']")
+                content = "\n".join(lines)
+                print("✅ Manually patched ALLOWED_HOSTS")
+                break
 
-def generate_phone():
-    """Generate a valid Pakistani mobile number (max 13 digits)."""
-    # Format: 03xx-xxxxxxx (12 digits) or 03xxxxxxxxx (11 digits)
-    phone = f"03{random.randint(0, 9)}{random.randint(0, 9)}-{random.randint(1000000, 9999999)}"
-    # Remove dash if we want pure digits, but keep dash for readability; total length 13 including dash
-    if len(phone) > 15:
-        phone = phone.replace('-', '')[:15]
-    return phone
+    # 2. Ensure DEBUG reads from .env but defaults to True on local (no DATABASE_URL set)
+    # Railway production has DATABASE_URL, local usually doesn't.
+    # Insert a safe DEBUG default after the env reading
+    if "DEBUG = env('DEBUG', default=False)" in content:
+        # Already using environ, but we want default=True when no DATABASE_URL and not on Railway
+        debug_line = "DEBUG = env('DEBUG', default=False)"
+        new_debug = """# Auto-detect local development (no DATABASE_URL means local)
+if not os.environ.get('DATABASE_URL'):
+    DEBUG = True
+else:
+    DEBUG = env('DEBUG', default=False)"""
+        # Replace the line
+        content = content.replace(debug_line, new_debug)
+        print("✅ Set DEBUG=True automatically for local environment")
+    else:
+        print("⚠️ Could not auto-set DEBUG, but it's fine. You can manually set DEBUG=True in .env")
 
-def add_students(schema_name, count=50):
-    try:
-        tenant = SchoolClient.objects.get(schema_name=schema_name)
-    except SchoolClient.DoesNotExist:
-        print(f"❌ Tenant '{schema_name}' not found.")
-        return
+    # Write back
+    with open(SETTINGS_FILE, "w") as f:
+        f.write(content)
 
-    with schema_context(schema_name):
-        # Ensure fee structures exist
-        for grade in GRADES:
-            FeeStructure.objects.get_or_create(grade=grade, defaults={'monthly_fee': Decimal('500.00')})
+    print("\n🎯 Patches applied successfully!")
+    print("   Now run: source venv/bin/activate")
+    print("   Then: python manage.py runserver")
+    print("   Visit: http://127.0.0.1:8000/admin")
+    print("\n⚠️ Note: Railway pe push karne se pehle ensure ALLOWED_HOSTS env variable set ho (e.g., 'yourdomain.com')")
+    return True
 
-        # Find current max roll number
-        max_roll = 0
-        for r in Student.objects.values_list('roll_number', flat=True):
-            if r and r.isdigit():
-                max_roll = max(max_roll, int(r))
-        next_roll = max_roll + 1
-
-        students_to_create = []
-        for _ in range(count):
-            first_name = fake.first_name()
-            last_name = fake.last_name()
-            name = f"{first_name} {last_name}"
-            father_name = f"{fake.first_name_male()} {last_name}"
-            grade = random.choice(GRADES)
-            section = random.choice(SECTIONS)
-            fee_struct = FeeStructure.objects.filter(grade=grade).first()
-            custom_fee = fee_struct.monthly_fee if fee_struct else Decimal('0')
-
-            student = Student(
-                name=name,
-                father_name=father_name,
-                father_cnic=generate_cnic(),
-                parent_mobile=generate_phone(),
-                grade=grade,
-                section=section,
-                admission_date=fake.date_between(start_date='-3y', end_date='today'),
-                status=random.choice(STATUSES),
-                gender=random.choice(['male', 'female']),
-                date_of_birth=fake.date_of_birth(minimum_age=4, maximum_age=18),
-                address=fake.address(),
-                notes="Auto‑generated for demo video",
-                custom_fee=custom_fee,
-                roll_number=str(next_roll)
-            )
-            students_to_create.append(student)
-            next_roll += 1
-
-        Student.objects.bulk_create(students_to_create)
-        print(f"✅ Added {count} Pakistani students to '{schema_name}'. Total students now: {Student.objects.count()}")
-
-if __name__ == '__main__':
-    add_students('ilama', 50)
+if __name__ == "__main__":
+    patch_settings()

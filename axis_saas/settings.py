@@ -22,9 +22,16 @@ def get_csrf_trusted_origins():
 
 
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-fallback-for-build-only')
-DEBUG = env('DEBUG', default=False)
+# Auto-detect local development (no DATABASE_URL means local)
+if not os.environ.get('DATABASE_URL'):
+    DEBUG = True
+else:
+    DEBUG = env('DEBUG', default=False)
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',') or ['*']
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',') if os.environ.get('ALLOWED_HOSTS') else ['*']
+# Auto-add local development hosts when DEBUG is True
+if DEBUG:
+    ALLOWED_HOSTS += ['127.0.0.1', 'localhost']
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
