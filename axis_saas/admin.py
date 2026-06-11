@@ -294,6 +294,7 @@ class SchoolFeeSettingsAdmin(admin.ModelAdmin):
     list_display = ('fee_generation_day', 'due_date_offset', 'late_fee_penalty', 'updated_at')
 # Gym models registration
 from .models import GymCustomer, GymSubscription, GymPayment, GymAttendance, GymSettings
+from .models import ProductCategory, Product
 
 @admin.register(GymCustomer)
 class GymCustomerAdmin(TenantOnlyAdminMixin, admin.ModelAdmin):
@@ -321,3 +322,15 @@ class GymAttendanceAdmin(admin.ModelAdmin):
 @admin.register(GymSettings)
 class GymSettingsAdmin(admin.ModelAdmin):
     list_display = ('default_monthly_fee', 'subscription_generation_day', 'due_date_offset')
+
+# Stock Management admin
+@admin.register(ProductCategory)
+class ProductCategoryAdmin(admin.ModelAdmin):
+    list_display = ('name', 'description')
+    search_fields = ('name',)
+
+@admin.register(Product)
+class ProductAdmin(admin.ModelAdmin):
+    list_display = ('sku', 'name', 'category', 'selling_price', 'quantity')
+    list_filter = ('category',)
+    search_fields = ('name', 'sku')

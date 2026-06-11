@@ -1986,6 +1986,168 @@ def gym_attendance(request, schema_name):
     from django.shortcuts import render
     from django_tenants.utils import schema_context
 
+
+# ==================== STOCK MANAGEMENT VIEWS ====================
+
+@require_tenant_type(['school'])
+
+@require_tenant_type(['school'])
+def stock_management(request, schema_name):
+    """Main stock management page: list categories and products (RAW SQL)."""
+    from django.shortcuts import render
+    from django.db import connection
+    from .models import ProductCategory, Product
+    from django_tenants.utils import schema_context
+
+    tenant = get_tenant(request, schema_name)
+    with schema_context(schema_name):
+        # RAW SQL for categories
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id, name, description FROM axis_saas_productcategory ORDER BY name")
+            raw_cats = cursor.fetchall()
+
+        # RAW SQL for products
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT p.id, p.name, p.sku, p.selling_price, p.quantity, p.notes,
+                       c.id as category_id, c.name as category_name
+                FROM axis_saas_product p
+                JOIN axis_saas_productcategory c ON p.category_id = c.id
+                ORDER BY c.name, p.name
+            """)
+            raw_products = cursor.fetchall()
+
+        # Debug prints
+        print("="*60)
+        print(f"[DEBUG] Stock view for tenant '{schema_name}'")
+        print(f"  RAW categories: {len(raw_cats)}")
+        print(f"  RAW products:   {len(raw_products)}")
+        for prod in raw_products:
+            print(f"    - {prod[1]} (SKU: {prod[2]}, cat: {prod[7]})")
+        print("="*60)
+
+        context = {
+            'tenant': tenant,
+            'raw_cats': raw_cats,
+            'raw_products': raw_products,
+            'logo_url': tenant.school_logo.url if tenant.school_logo else None,
+        }
+    return render(request, 'tenant/stock_management.html', context)
+
+@require_tenant_type(['school'])
+def add_category(request, schema_name):
+    """Add or edit a product category."""
+    from django.shortcuts import redirect, get_object_or_404
+    from django.contrib import messages
+    from .models import ProductCategory
+    from django_tenants.utils import schema_context
+
+    if request.method == 'POST':
+        cat_id = request.POST.get('category_id')
+        name = request.POST.get('name', '').strip()
+        description = request.POST.get('description', '').strip()
+        if not name:
+            messages.error(request, "Category name is required")
+            return redirect('stock_management', schema_name=schema_name)
+
+        with schema_context(schema_name):
+            if cat_id:
+                category = get_object_or_404(ProductCategory, id=cat_id)
+                category.name = name
+                category.description = description
+                category.save()
+                messages.success(request, f"Category '{name}' updated.")
+            else:
+                if ProductCategory.objects.filter(name__iexact=name).exists():
+                    messages.error(request, "Category with this name already exists.")
+                else:
+                    ProductCategory.objects.create(name=name, description=description)
+                    messages.success(request, f"Category '{name}' added.")
+    return redirect('stock_management', schema_name=schema_name)
+@require_tenant_type(['school'])
+def delete_category(request, schema_name, category_id):
+    """Delete a category (only if no products linked)."""
+    from django.shortcuts import get_object_or_404, redirect
+    from django.contrib import messages
+    from .models import ProductCategory
+    from django_tenants.utils import schema_context
+
+    with schema_context(schema_name):
+        category = get_object_or_404(ProductCategory, id=category_id)
+        if category.products.exists():
+            messages.error(request, f"Cannot delete '{category.name}' because it has products. Remove products first.")
+        else:
+            category.delete()
+            messages.success(request, f"Category '{category.name}' deleted.")
+    return redirect('stock_management', schema_name=schema_name)
+
+
+@require_tenant_type(['school'])
+def add_product(request, schema_name):
+    """Add or edit a product."""
+    from django.shortcuts import redirect, get_object_or_404
+    from django.contrib import messages
+    from decimal import Decimal
+    from .models import ProductCategory, Product
+    from django_tenants.utils import schema_context
+
+    if request.method == 'POST':
+        product_id = request.POST.get('product_id')
+        category_id = request.POST.get('category')
+        name = request.POST.get('name', '').strip()
+        selling_price = request.POST.get('selling_price')
+        quantity = request.POST.get('quantity')
+        notes = request.POST.get('notes', '')
+
+        if not name or not category_id or not selling_price:
+            messages.error(request, "Category, Name, and Selling Price are required.")
+            return redirect('stock_management', schema_name=schema_name)
+
+        try:
+            price = Decimal(selling_price)
+            qty = int(quantity) if quantity else 0
+        except:
+            messages.error(request, "Invalid price or quantity.")
+            return redirect('stock_management', schema_name=schema_name)
+
+        with schema_context(schema_name):
+            category = get_object_or_404(ProductCategory, id=category_id)
+            if product_id:
+                product = get_object_or_404(Product, id=product_id)
+                product.category = category
+                product.name = name
+                product.selling_price = price
+                product.quantity = qty
+                product.notes = notes
+                product.save()
+                messages.success(request, f"Product '{name}' updated.")
+            else:
+                product = Product.objects.create(
+                    category=category,
+                    name=name,
+                    selling_price=price,
+                    quantity=qty,
+                    notes=notes
+                )
+                messages.success(request, f"Product '{name}' added. SKU: {product.sku}")
+    return redirect('stock_management', schema_name=schema_name)
+
+
+@require_tenant_type(['school'])
+def delete_product(request, schema_name, product_id):
+    """Delete a product."""
+    from django.shortcuts import get_object_or_404, redirect
+    from django.contrib import messages
+    from .models import Product
+    from django_tenants.utils import schema_context
+
+    with schema_context(schema_name):
+        product = get_object_or_404(Product, id=product_id)
+        product.delete()
+        messages.success(request, f"Product '{product.name}' deleted.")
+    return redirect('stock_management', schema_name=schema_name)
+
+
     with schema_context(schema_name):
         context = {
             'tenant': get_tenant(request, schema_name),

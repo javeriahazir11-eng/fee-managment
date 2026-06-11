@@ -99,6 +99,7 @@ def student_list(request, schema_name):
     grade = request.GET.get('grade', '')
     section = request.GET.get('section', '')
     status = request.GET.get('status', '')
+    page_number = request.GET.get('page', 1)
     with schema_context(schema_name):
         students = Student.objects.all()
         if query:
@@ -111,21 +112,28 @@ def student_list(request, schema_name):
         if section: students = students.filter(section=section)
         if status: students = students.filter(status=status)
         students = students.order_by('-enrolled_on')
+        # Annotate pending amount
         for s in students:
             s.pending_amount = sum(fr.remaining for fr in s.fee_records.filter(status__in=['pending', 'partial', 'overdue']))
+        # Paginate
+        from django.core.paginator import Paginator
+        paginator = Paginator(students, 20)
+        page_obj = paginator.get_page(page_number)
         grades = Student.objects.values_list('grade', flat=True).distinct().order_by('grade')
         grades = list(grades)
         sections = Student.objects.values_list('section', flat=True).distinct().order_by('section')
         sections = list(sections)
         status_choices = Student.STATUS_CHOICES
     context = {
-        'tenant': tenant, 'students': students, 'grades': grades, 'sections': sections,
-        'status_choices': status_choices, 'search_query': query,
+        'tenant': tenant,
+        'students': page_obj,          # page object, not the full queryset
+        'grades': grades,
+        'sections': sections,
+        'status_choices': status_choices,
+        'search_query': query,
         'logo_url': tenant.school_logo.url if tenant.school_logo else None,
     }
     return render(request, 'tenant/student_list.html', context)
-
-# ------------------- Student Profile -------------------
 @require_tenant_type(['school'])
 def student_profile(request, schema_name, student_id):
     tenant = get_tenant(request, schema_name)
@@ -339,7 +347,7 @@ def reports(request, schema_name):
 def fee_collection(request, schema_name, student_id=None):
     tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
-        # Handle POST payment
+        # Handle POST payment (works for both list and student views)
         if request.method == 'POST':
             student_id_post = request.POST.get('student_id')
             amount = request.POST.get('amount')
@@ -349,7 +357,6 @@ def fee_collection(request, schema_name, student_id=None):
                 try:
                     student = Student.objects.get(id=student_id_post)
                     amount = Decimal(amount)
-                    # Get pending records for this student
                     pending_records = student.fee_records.filter(status__in=['pending', 'partial', 'overdue']).order_by('due_date')
                     total_pending = sum(r.remaining for r in pending_records)
                     if amount > total_pending:
@@ -369,7 +376,6 @@ def fee_collection(request, schema_name, student_id=None):
                             remaining = 0
                         record.save()
                         paid_records.append(record)
-                    # Create payment transaction
                     payment = PaymentTransaction.objects.create(
                         student=student,
                         amount=amount,
@@ -389,13 +395,31 @@ def fee_collection(request, schema_name, student_id=None):
                 messages.error(request, "Invalid payment data")
             return redirect('fee_collection', schema_name=schema_name)
 
-        # GET request - prepare filters and student data
+        # ---------- GET request ----------
+        # If student_id is provided, show the dedicated payment page for that student
+        if student_id is not None:
+            try:
+                student = Student.objects.get(id=student_id)
+                pending_records = student.fee_records.filter(status__in=['pending', 'partial', 'overdue']).order_by('due_date')
+                total_pending = sum(r.remaining for r in pending_records)
+                context = {
+                    'tenant': tenant,
+                    'student': student,
+                    'pending_records': pending_records,
+                    'total_pending': total_pending,
+                    'logo_url': tenant.school_logo.url if tenant.school_logo else None,
+                }
+                return render(request, 'tenant/collect_fee.html', context)
+            except Student.DoesNotExist:
+                messages.error(request, "Student not found")
+                return redirect('fee_collection', schema_name=schema_name)
+
+        # Otherwise, show the list of students with pending fees (no inline section)
         search_filter = request.GET.get('pending_search', '')
         grade_filter = request.GET.get('pending_grade', '')
         section_filter = request.GET.get('pending_section', '')
         page_number = request.GET.get('page', 1)
 
-        # Get all students with pending fees (aggregated)
         students_qs = Student.objects.all()
         if search_filter:
             students_qs = students_qs.filter(
@@ -407,7 +431,6 @@ def fee_collection(request, schema_name, student_id=None):
         if section_filter:
             students_qs = students_qs.filter(section=section_filter)
 
-        # Annotate pending total
         pending_students = []
         for s in students_qs:
             pending = sum(fr.remaining for fr in s.fee_records.filter(status__in=['pending', 'partial', 'overdue']))
@@ -416,35 +439,18 @@ def fee_collection(request, schema_name, student_id=None):
                 pending_students.append(s)
         pending_students.sort(key=lambda x: x.pending_total, reverse=True)
 
-        # Pagination
         paginator = Paginator(pending_students, 20)
         pending_page = paginator.get_page(page_number)
 
-        # Selected student details if student_id provided
-        selected_student = None
-        total_pending = 0
-        pending_records = []
-        if student_id:
-            try:
-                selected_student = Student.objects.get(id=student_id)
-                pending_records = selected_student.fee_records.filter(status__in=['pending', 'partial', 'overdue']).order_by('due_date')
-                total_pending = sum(r.remaining for r in pending_records)
-            except Student.DoesNotExist:
-                pass
-
-        # Recent payments
-        recent_payments = list(PaymentTransaction.objects.select_related('student').order_by('-payment_date')[:5])
         total_pending_all = sum(fr.remaining for fr in FeeRecord.objects.filter(status__in=['pending', 'partial', 'overdue']))
         total_payments_count = PaymentTransaction.objects.count()
+        recent_payments = list(PaymentTransaction.objects.select_related('student').order_by('-payment_date')[:5])
         grades = list(Student.objects.values_list('grade', flat=True).distinct().order_by('grade'))
         sections = list(Student.objects.values_list('section', flat=True).distinct().order_by('section'))
 
         context = {
             'tenant': tenant,
             'pending_students': pending_page,
-            'selected_student': selected_student,
-            'total_pending': total_pending,
-            'pending_records': pending_records,
             'recent_payments': recent_payments,
             'total_pending_all': total_pending_all,
             'total_payments_count': total_payments_count,
@@ -456,7 +462,6 @@ def fee_collection(request, schema_name, student_id=None):
             'logo_url': tenant.school_logo.url if tenant.school_logo else None,
         }
         return render(request, 'tenant/fee_collection.html', context)
-
 @csrf_exempt
 @require_http_methods(["GET"])
 def debug_payments_api(request):
@@ -731,16 +736,19 @@ def manual_generate_api(request):
         today = timezone.localdate()
         month = today.month
         year = today.year
-        existing = FeeRecord.objects.filter(month=month, year=year)
-        if existing.exists():
-            return JsonResponse({"message": f"Fee records for {month}/{year} already exist. ({existing.count()} records)"})
         students = Student.objects.filter(status="active")
         if not students.exists():
-            return JsonResponse({"message": "No active students found. Please add students first."})
+            return JsonResponse({"message": "No active students found."})
         due_date = today + timedelta(days=settings.due_date_offset)
         created = 0
+        skipped_existing = 0
         skipped_no_fee = 0
         for student in students:
+            # Check if already has fee record for this month
+            existing = FeeRecord.objects.filter(student=student, month=month, year=year).first()
+            if existing:
+                skipped_existing += 1
+                continue
             base_fee = student.custom_fee if student.custom_fee > 0 else 0
             if base_fee == 0:
                 fee_struct = FeeStructure.objects.filter(grade=student.grade).first()
@@ -749,21 +757,19 @@ def manual_generate_api(request):
                     student.custom_fee = base_fee
                     student.save(update_fields=["custom_fee"])
             if base_fee > 0:
-                obj, is_new = FeeRecord.objects.get_or_create(
+                FeeRecord.objects.create(
                     student=student, month=month, year=year,
-                    defaults={"amount": base_fee, "due_date": due_date, "status": "pending"}
+                    amount=base_fee, due_date=due_date, status="pending"
                 )
-                if is_new:
-                    created += 1
+                created += 1
             else:
                 skipped_no_fee += 1
         message = f"Generated {created} fee records for {month}/{year}."
+        if skipped_existing > 0:
+            message += f" Skipped {skipped_existing} students because they already have a fee record."
         if skipped_no_fee > 0:
             message += f" Skipped {skipped_no_fee} students because no fee structure defined for their grade."
-        return JsonResponse({"message": message, "created": created, "skipped": skipped_no_fee})
-
-
-# ------------------- API: Manual Generate for Single Student -------------------
+        return JsonResponse({"message": message, "created": created, "skipped_existing": skipped_existing, "skipped_no_fee": skipped_no_fee})
 @csrf_exempt
 @require_http_methods(["POST"])
 
@@ -924,7 +930,6 @@ def student_current_fee_status_api(request, schema_name, student_id):
             }
         return JsonResponse(data)
 
-@require_tenant_type(['gym'])
 def gym_generate_subscription(request, schema_name, customer_id):
     """Generate a new subscription for a gym customer (multi-month)."""
     from django.http import JsonResponse
@@ -961,6 +966,7 @@ def gym_generate_subscription(request, schema_name, customer_id):
         due_offset = settings.due_date_offset
 
         created = []
+
         for i in range(months):
             target_month = today.month + i
             target_year = today.year
@@ -968,25 +974,38 @@ def gym_generate_subscription(request, schema_name, customer_id):
                 target_month -= 12
                 target_year += 1
 
-            # Check if subscription already exists for that month
-            if GymSubscription.objects.filter(customer=customer, month=target_month, year=target_year).exists():
-                continue
-
-            # Due date: membership start day or fallback to generation day
+            # ✅ Compute due_date for this target month BEFORE checking existence
             due_day = customer.membership_start.day if customer.membership_start else 1
             max_day = monthrange(target_year, target_month)[1]
             due_day = min(due_day, max_day)
             due_date = date(target_year, target_month, due_day) + timedelta(days=due_offset)
 
-            sub = GymSubscription.objects.create(
-                customer=customer,
-                month=target_month,
-                year=target_year,
-                amount=monthly_fee,
-                due_date=due_date,
-                status='pending'
-            )
-            created.append(sub)
+            existing = GymSubscription.objects.filter(customer=customer, month=target_month, year=target_year).first()
+            if existing:
+                if existing.is_cancelled:
+                    # Reactivate cancelled subscription with new parameters
+                    existing.amount = monthly_fee
+                    existing.paid_amount = Decimal('0')
+                    existing.due_date = due_date          # ✅ now due_date is defined
+                    existing.status = 'pending'
+                    existing.is_cancelled = False
+                    existing.cancelled_on = None
+                    existing.save()
+                    created.append(existing)
+                else:
+                    # Already have a valid subscription for this month
+                    continue
+            else:
+                # No subscription → create new one
+                sub = GymSubscription.objects.create(
+                    customer=customer,
+                    month=target_month,
+                    year=target_year,
+                    amount=monthly_fee,
+                    due_date=due_date,
+                    status='pending'
+                )
+                created.append(sub)
 
         if created:
             return JsonResponse({'message': f'Generated {len(created)} subscription(s).'})
@@ -1030,7 +1049,7 @@ def gym_cancel_subscription(request, schema_name, subscription_id):
             daily_rate = sub.amount / Decimal(days_in_month)
             remaining_days = days_in_month - days_used
             refund = daily_rate * Decimal(remaining_days)
-
+        sub.status = 'cancelled'
         sub.is_cancelled = True
         sub.cancelled_on = today
         sub.save()
@@ -1966,6 +1985,146 @@ def gym_attendance(request, schema_name):
     """Attendance management page."""
     from django.shortcuts import render
     from django_tenants.utils import schema_context
+
+
+# ==================== STOCK MANAGEMENT VIEWS ====================
+
+@require_tenant_type(['school'])
+def stock_management(request, schema_name):
+    """Main stock management page: list categories and products."""
+    from django.shortcuts import render, redirect, get_object_or_404
+    from django.contrib import messages
+    from .models import ProductCategory, Product
+    from django_tenants.utils import schema_context
+
+    tenant = get_tenant(request, schema_name)
+    with schema_context(schema_name):
+        categories = ProductCategory.objects.all().order_by('name')
+        products = Product.objects.select_related('category').all().order_by('category__name', 'name')
+        context = {
+            'tenant': tenant,
+            'categories': categories,
+            'products': products,
+            'logo_url': tenant.school_logo.url if tenant.school_logo else None,
+        }
+    return render(request, 'tenant/stock_management.html', context)
+
+
+@require_tenant_type(['school'])
+def add_category(request, schema_name):
+    """Add or edit a product category."""
+    from django.shortcuts import redirect, get_object_or_404
+    from django.contrib import messages
+    from .models import ProductCategory
+    from django_tenants.utils import schema_context
+
+    if request.method == 'POST':
+        cat_id = request.POST.get('category_id')
+        name = request.POST.get('name', '').strip()
+        description = request.POST.get('description', '').strip()
+        if not name:
+            messages.error(request, "Category name is required")
+            return redirect('stock_management', schema_name=schema_name)
+
+        with schema_context(schema_name):
+            if cat_id:
+                category = get_object_or_404(ProductCategory, id=cat_id)
+                category.name = name
+                category.description = description
+                category.save()
+                messages.success(request, f"Category '{name}' updated.")
+            else:
+                if ProductCategory.objects.filter(name__iexact=name).exists():
+                    messages.error(request, "Category with this name already exists.")
+                else:
+                    ProductCategory.objects.create(name=name, description=description)
+                    messages.success(request, f"Category '{name}' added.")
+    return redirect('stock_management', schema_name=schema_name)
+
+
+@require_tenant_type(['school'])
+def delete_category(request, schema_name, category_id):
+    """Delete a category (only if no products linked)."""
+    from django.shortcuts import get_object_or_404, redirect
+    from django.contrib import messages
+    from .models import ProductCategory
+    from django_tenants.utils import schema_context
+
+    with schema_context(schema_name):
+        category = get_object_or_404(ProductCategory, id=category_id)
+        if category.products.exists():
+            messages.error(request, f"Cannot delete '{category.name}' because it has products. Remove products first.")
+        else:
+            category.delete()
+            messages.success(request, f"Category '{category.name}' deleted.")
+    return redirect('stock_management', schema_name=schema_name)
+
+
+@require_tenant_type(['school'])
+def add_product(request, schema_name):
+    """Add or edit a product."""
+    from django.shortcuts import redirect, get_object_or_404
+    from django.contrib import messages
+    from decimal import Decimal
+    from .models import ProductCategory, Product
+    from django_tenants.utils import schema_context
+
+    if request.method == 'POST':
+        product_id = request.POST.get('product_id')
+        category_id = request.POST.get('category')
+        name = request.POST.get('name', '').strip()
+        selling_price = request.POST.get('selling_price')
+        quantity = request.POST.get('quantity')
+        notes = request.POST.get('notes', '')
+
+        if not name or not category_id or not selling_price:
+            messages.error(request, "Category, Name, and Selling Price are required.")
+            return redirect('stock_management', schema_name=schema_name)
+
+        try:
+            price = Decimal(selling_price)
+            qty = int(quantity) if quantity else 0
+        except:
+            messages.error(request, "Invalid price or quantity.")
+            return redirect('stock_management', schema_name=schema_name)
+
+        with schema_context(schema_name):
+            category = get_object_or_404(ProductCategory, id=category_id)
+            if product_id:
+                product = get_object_or_404(Product, id=product_id)
+                product.category = category
+                product.name = name
+                product.selling_price = price
+                product.quantity = qty
+                product.notes = notes
+                product.save()
+                messages.success(request, f"Product '{name}' updated.")
+            else:
+                product = Product.objects.create(
+                    category=category,
+                    name=name,
+                    selling_price=price,
+                    quantity=qty,
+                    notes=notes
+                )
+                messages.success(request, f"Product '{name}' added. SKU: {product.sku}")
+    return redirect('stock_management', schema_name=schema_name)
+
+
+@require_tenant_type(['school'])
+def delete_product(request, schema_name, product_id):
+    """Delete a product."""
+    from django.shortcuts import get_object_or_404, redirect
+    from django.contrib import messages
+    from .models import Product
+    from django_tenants.utils import schema_context
+
+    with schema_context(schema_name):
+        product = get_object_or_404(Product, id=product_id)
+        product.delete()
+        messages.success(request, f"Product '{product.name}' deleted.")
+    return redirect('stock_management', schema_name=schema_name)
+
 
     with schema_context(schema_name):
         context = {

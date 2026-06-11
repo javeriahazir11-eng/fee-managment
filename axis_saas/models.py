@@ -332,3 +332,37 @@ class GymSettings(models.Model):
 
     class Meta:
         verbose_name_plural = "Gym Settings"
+
+# ------------------- Stock Management Models -------------------
+class ProductCategory(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True, null=True)
+
+    class Meta:
+        verbose_name_plural = "Product Categories"
+
+    def __str__(self):
+        return self.name
+
+
+class Product(models.Model):
+    category = models.ForeignKey(ProductCategory, on_delete=models.CASCADE, related_name='products')
+    name = models.CharField(max_length=200)
+    sku = models.CharField(max_length=50, unique=True, blank=True)
+    selling_price = models.DecimalField(max_digits=10, decimal_places=2)
+    quantity = models.PositiveIntegerField(default=0)
+    notes = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        if not self.sku:
+            # Auto-generate SKU: CATEGORY-NAME-<random>? Use category prefix + timestamp
+            # Simpler: use category name first letters + id pattern (but id not yet)
+            # Use timestamp based: SKU-<timestamp>
+            import time
+            self.sku = f"SKU-{int(time.time())}-{self.category.id if self.category else 0}"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.name} ({self.sku})"

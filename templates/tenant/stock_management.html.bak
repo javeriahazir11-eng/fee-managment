@@ -1,63 +1,4 @@
-#!/usr/bin/env python3
-"""
-AXIS Stock Management – Final Fix (Replace View & Template)
-Run: python3 fix_stock_final.py
-"""
-
-import os
-import re
-
-VIEWS_PATH = "axis_saas/views.py"
-TEMPLATE_PATH = "templates/tenant/stock_management.html"
-
-# ==================== NEW VIEW FUNCTION ====================
-NEW_STOCK_FUNCTION = '''
-@require_tenant_type(['school'])
-def stock_management(request, schema_name):
-    """Main stock management page: list categories and products (RAW SQL)."""
-    from django.shortcuts import render
-    from django.db import connection
-    from .models import ProductCategory, Product
-    from django_tenants.utils import schema_context
-
-    tenant = get_tenant(request, schema_name)
-    with schema_context(schema_name):
-        # RAW SQL for categories
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT id, name, description FROM axis_saas_productcategory ORDER BY name")
-            raw_cats = cursor.fetchall()
-
-        # RAW SQL for products
-        with connection.cursor() as cursor:
-            cursor.execute("""
-                SELECT p.id, p.name, p.sku, p.selling_price, p.quantity, p.notes,
-                       c.id as category_id, c.name as category_name
-                FROM axis_saas_product p
-                JOIN axis_saas_productcategory c ON p.category_id = c.id
-                ORDER BY c.name, p.name
-            """)
-            raw_products = cursor.fetchall()
-
-        # Debug prints
-        print("="*60)
-        print(f"[DEBUG] Stock view for tenant '{schema_name}'")
-        print(f"  RAW categories: {len(raw_cats)}")
-        print(f"  RAW products:   {len(raw_products)}")
-        for prod in raw_products:
-            print(f"    - {prod[1]} (SKU: {prod[2]}, cat: {prod[7]})")
-        print("="*60)
-
-        context = {
-            'tenant': tenant,
-            'raw_cats': raw_cats,
-            'raw_products': raw_products,
-            'logo_url': tenant.school_logo.url if tenant.school_logo else None,
-        }
-    return render(request, 'tenant/stock_management.html', context)
-'''
-
-# ==================== NEW TEMPLATE ====================
-NEW_TEMPLATE = """{% extends 'tenant/base.html' %}
+{% extends 'tenant/base.html' %}
 {% load static %}
 {% block title %}Stock Management | {{ tenant.name }}{% endblock %}
 {% block body %}
@@ -82,6 +23,7 @@ NEW_TEMPLATE = """{% extends 'tenant/base.html' %}
                     <tr><th>Name</th><th>Description</th><th>Actions</th></tr>
                 </thead>
                 <tbody>
+                    {# Use raw_cats (list of tuples) instead of ORM categories #}
                     {% for cat in raw_cats %}
                     <tr>
                         <td>{{ cat.1 }}</td>   {# name #}
@@ -93,10 +35,10 @@ NEW_TEMPLATE = """{% extends 'tenant/base.html' %}
                             <button class="action-icon" onclick="deleteCategory({{ cat.0 }}, '{{ cat.1|escapejs }}')" title="Delete">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                             </button>
-                         </td>
-                     </tr>
+                        </td>
+                    </tr>
                     {% empty %}
-                     <tr><td colspan="3" class="empty-row">No categories yet. Add one.</td></tr>
+                    <tr><td colspan="3" class="empty-row">No categories yet. Add one.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -116,24 +58,24 @@ NEW_TEMPLATE = """{% extends 'tenant/base.html' %}
                     <tr><th>SKU</th><th>Name</th><th>Category</th><th>Price (₹)</th><th>Qty</th><th>Actions</th></tr>
                 </thead>
                 <tbody>
-                    {% for p in raw_products %}
-                     <tr>
-                         <td><code>{{ p.2 }}</code></td>   {# sku #}
-                         <td>{{ p.1 }}</td>                 {# name #}
-                         <td>{{ p.7 }}</td>                 {# category_name #}
-                         <td>₹{{ p.3|floatformat:2 }}</td>  {# selling_price #}
-                         <td>{{ p.4 }}</td>                 {# quantity #}
+                    {% for p in products %}
+                    <tr>
+                        <td><code>{{ p.sku }}</code></td>
+                        <td>{{ p.name }}</td>
+                        <td>{{ p.category.name }}</td>
+                        <td>₹{{ p.selling_price|floatformat:2 }}</td>
+                        <td>{{ p.quantity }}</td>
                         <td class="action-btns">
-                            <button class="action-icon" onclick="editProduct({{ p.0 }}, '{{ p.1|escapejs }}', {{ p.6 }}, {{ p.3 }}, {{ p.4 }}, '{{ p.5|escapejs }}')" title="Edit">
+                            <button class="action-icon" onclick="editProduct({{ p.id }}, '{{ p.name|escapejs }}', {{ p.category.id }}, {{ p.selling_price }}, {{ p.quantity }}, '{{ p.notes|escapejs }}')" title="Edit">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4Z"/></svg>
                             </button>
-                            <button class="action-icon" onclick="deleteProduct({{ p.0 }}, '{{ p.1|escapejs }}')" title="Delete">
+                            <button class="action-icon" onclick="deleteProduct({{ p.id }}, '{{ p.name|escapejs }}')" title="Delete">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                             </button>
                         </td>
-                     </tr>
+                    </tr>
                     {% empty %}
-                     <tr><td colspan="6" class="empty-row">No products. Add one.</td></tr>
+                    <tr><td colspan="6" class="empty-row">No products. Add one.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -149,8 +91,14 @@ NEW_TEMPLATE = """{% extends 'tenant/base.html' %}
         <form method="post" action="{% url 'add_category' schema_name=tenant.schema_name %}" id="categoryForm">
             {% csrf_token %}
             <input type="hidden" name="category_id" id="catId">
-            <div class="form-field"><label>Name</label><input type="text" name="name" id="catName" required></div>
-            <div class="form-field"><label>Description</label><textarea name="description" id="catDesc" rows="2"></textarea></div>
+            <div class="form-field">
+                <label>Name</label>
+                <input type="text" name="name" id="catName" required>
+            </div>
+            <div class="form-field">
+                <label>Description</label>
+                <textarea name="description" id="catDesc" rows="2"></textarea>
+            </div>
             <div class="modal-actions">
                 <button type="button" class="btn-secondary" onclick="closeCategoryModal()">Cancel</button>
                 <button type="submit" class="btn-primary" id="catSubmitBtn">Save Category</button>
@@ -175,10 +123,22 @@ NEW_TEMPLATE = """{% extends 'tenant/base.html' %}
                     {% endfor %}
                 </select>
             </div>
-            <div class="form-field"><label>Product Name</label><input type="text" name="name" id="prodName" required></div>
-            <div class="form-field"><label>Selling Price (₹)</label><input type="number" step="0.01" name="selling_price" id="prodPrice" required></div>
-            <div class="form-field"><label>Quantity</label><input type="number" name="quantity" id="prodQty" required></div>
-            <div class="form-field"><label>Notes</label><textarea name="notes" id="prodNotes" rows="2"></textarea></div>
+            <div class="form-field">
+                <label>Product Name</label>
+                <input type="text" name="name" id="prodName" required>
+            </div>
+            <div class="form-field">
+                <label>Selling Price (₹)</label>
+                <input type="number" step="0.01" name="selling_price" id="prodPrice" required>
+            </div>
+            <div class="form-field">
+                <label>Quantity</label>
+                <input type="number" name="quantity" id="prodQty" required>
+            </div>
+            <div class="form-field">
+                <label>Notes</label>
+                <textarea name="notes" id="prodNotes" rows="2"></textarea>
+            </div>
             <div class="modal-actions">
                 <button type="button" class="btn-secondary" onclick="closeProductModal()">Cancel</button>
                 <button type="submit" class="btn-primary" id="prodSubmitBtn">Save Product</button>
@@ -188,21 +148,101 @@ NEW_TEMPLATE = """{% extends 'tenant/base.html' %}
 </div>
 
 <style>
-.stock-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 1.5rem; }
-.stock-card { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; }
-.card-header { display: flex; align-items: center; gap: 0.75rem; padding: 1rem; background: var(--surface-alt); border-bottom: 1px solid var(--border); }
-.card-header h3 { flex: 1; font-size: 1.1rem; font-weight: 600; }
-.btn-sm { background: var(--primary); color: white; border: none; border-radius: 2rem; padding: 0.3rem 0.8rem; cursor: pointer; font-size: 0.75rem; }
-.modal { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index:1000; }
-.modal-content { background: var(--surface); border-radius: 1rem; padding: 1.5rem; max-width: 500px; width: 90%; }
-.form-field { margin-bottom: 1rem; }
-.form-field label { display: block; font-weight: 600; font-size: 0.8rem; margin-bottom: 0.25rem; }
-.form-field input, .form-field select, .form-field textarea { width: 100%; padding: 0.5rem; border-radius: 0.5rem; border: 1px solid var(--border); background: var(--surface-alt); }
-.modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
-.action-icon { background: none; border: none; cursor: pointer; padding: 0 0.25rem; color: var(--muted); }
-.action-icon:hover { color: var(--primary); }
-.close { float: right; cursor: pointer; font-size: 1.5rem; line-height: 1; }
-.empty-row { text-align: center; padding: 2rem; color: var(--muted); }
+.stock-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+    gap: 1.5rem;
+}
+.stock-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    overflow: hidden;
+}
+.card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: var(--surface-alt);
+    border-bottom: 1px solid var(--border);
+}
+.card-header h3 {
+    flex: 1;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+.btn-sm {
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 2rem;
+    padding: 0.3rem 0.8rem;
+    cursor: pointer;
+    font-size: 0.75rem;
+}
+.modal {
+    position: fixed;
+    top:0;
+    left:0;
+    width:100%;
+    height:100%;
+    background:rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index:1000;
+}
+.modal-content {
+    background: var(--surface);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    max-width: 500px;
+    width: 90%;
+}
+.form-field {
+    margin-bottom: 1rem;
+}
+.form-field label {
+    display: block;
+    font-weight: 600;
+    font-size: 0.8rem;
+    margin-bottom: 0.25rem;
+}
+.form-field input, .form-field select, .form-field textarea {
+    width: 100%;
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    background: var(--surface-alt);
+}
+.modal-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+    margin-top: 1rem;
+}
+.action-icon {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0 0.25rem;
+    color: var(--muted);
+}
+.action-icon:hover {
+    color: var(--primary);
+}
+.close {
+    float: right;
+    cursor: pointer;
+    font-size: 1.5rem;
+    line-height: 1;
+}
+.empty-row {
+    text-align: center;
+    padding: 2rem;
+    color: var(--muted);
+}
 </style>
 
 <script>
@@ -300,69 +340,3 @@ window.onclick = function(event) {
 }
 </script>
 {% endblock %}
-"""
-
-def patch_views():
-    """Replace the entire stock_management function in views.py."""
-    if not os.path.exists(VIEWS_PATH):
-        print(f"❌ {VIEWS_PATH} not found.")
-        return False
-
-    with open(VIEWS_PATH, "r") as f:
-        content = f.read()
-
-    # Backup
-    backup = VIEWS_PATH + ".bak"
-    if not os.path.exists(backup):
-        with open(backup, "w") as bf:
-            bf.write(content)
-        print(f"✅ Backup saved to {backup}")
-
-    # Find the stock_management function (from "def stock_management" to the next "def " at same indentation)
-    pattern = r'(def stock_management\(request, schema_name\):.*?)(?=\n@require_tenant_type|\ndef [a-zA-Z_]|$)'
-    match = re.search(pattern, content, re.DOTALL)
-    if not match:
-        print("❌ Could not find stock_management function. It may have been modified.")
-        return False
-
-    old_func = match.group(1)
-    # Replace with new function
-    new_content = content.replace(old_func, NEW_STOCK_FUNCTION)
-    with open(VIEWS_PATH, "w") as f:
-        f.write(new_content)
-    print("✅ Replaced stock_management function in views.py")
-    return True
-
-def patch_template():
-    """Replace stock_management.html with new template."""
-    if not os.path.exists(TEMPLATE_PATH):
-        print(f"❌ Template {TEMPLATE_PATH} not found.")
-        return False
-
-    backup = TEMPLATE_PATH + ".bak"
-    if not os.path.exists(backup):
-        import shutil
-        shutil.copy2(TEMPLATE_PATH, backup)
-        print(f"✅ Template backup saved to {backup}")
-
-    with open(TEMPLATE_PATH, "w") as f:
-        f.write(NEW_TEMPLATE)
-    print(f"✅ Replaced {TEMPLATE_PATH} with final version.")
-    return True
-
-def main():
-    print("="*60)
-    print("AXIS Stock Management – Final Fix")
-    print("This will replace the stock_management view and template.")
-    print("="*60)
-    if patch_views():
-        print("\n✅ View patched successfully.")
-    else:
-        print("\n❌ View patching failed – manual intervention may be needed.")
-    patch_template()
-    print("\n⚠️  RESTART the Django server: python manage.py runserver")
-    print("   Then refresh the Stock Management page. Products should appear.")
-    print("\nIf products still don't appear, check the terminal debug output (raw products count).")
-
-if __name__ == "__main__":
-    main()

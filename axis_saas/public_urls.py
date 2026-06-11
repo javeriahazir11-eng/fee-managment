@@ -7,7 +7,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 
 from .models import SchoolClient
 
-from .views import gym_generate_subscription, gym_cancel_subscription, gym_update_subscription, gym_edit_attendance, add_student, dashboard, debug_payments_api, defaulters, edit_student, family_payment, fee_collection, fee_receipt, fee_settings, fee_status_api, fee_structure, gym_attendance, gym_checkin_api, gym_checkout_api, gym_customer_add, gym_customer_edit, gym_customer_list, gym_customer_profile, gym_dashboard, gym_payment, gym_receipt, gym_reports, gym_settings, manual_generate_api, manual_generate_single_api, reports, settings, student_fee_records_api, student_list, student_payments_api, student_current_fee_status_api, student_profile, student_search_api, gym_revenue_stats_api, gym_attendance_stats_api, gym_customers_list_api, gym_customer_detail_api, gym_subscription_status_api, gym_attendance_data_api, gym_eligible_customers_api, gym_search_customer_api, gym_export_attendance_api
+from .views import gym_generate_subscription, gym_cancel_subscription, gym_update_subscription, gym_edit_attendance, add_student, dashboard, debug_payments_api, defaulters, edit_student, family_payment, fee_collection, fee_receipt, fee_settings, fee_status_api, fee_structure, gym_attendance, gym_checkin_api, gym_checkout_api, gym_customer_add, gym_customer_edit, gym_customer_list, gym_customer_profile, gym_dashboard, gym_payment, gym_receipt, gym_reports, gym_settings, manual_generate_api, manual_generate_single_api, reports, settings, student_fee_records_api, student_list, student_payments_api, student_current_fee_status_api, student_profile, student_search_api, gym_revenue_stats_api, gym_attendance_stats_api, gym_customers_list_api, gym_customer_detail_api, gym_subscription_status_api, gym_attendance_data_api, gym_eligible_customers_api, gym_search_customer_api, gym_export_attendance_api, stock_management, add_category, delete_category, add_product, delete_product
 
 def saas_homepage(request):
     return HttpResponse('''
@@ -174,7 +174,7 @@ urlpatterns = [
     path('portal/<slug:schema_name>/students/<int:student_id>/', student_profile_view, name='student_profile'),
     
     # Fee collection
-    re_path(r'^portal/(?P<schema_name>[a-zA-Z0-9_-]+)/fee/collection/(?:(?P<student_id>\d+)/)?$', fee_collection_view, name='fee_collection'),
+        re_path(r'^portal/(?P<schema_name>[a-zA-Z0-9_-]+)/fee/collection/(?:(?P<student_id>\d+)/)?$', fee_collection_view, name='fee_collection'),
     path('portal/<slug:schema_name>/fee/receipt/<int:receipt_id>/', fee_receipt_view, name='fee_receipt'),
     path('portal/<slug:schema_name>/defaulters/', defaulters_view, name='defaulters'),
     path('portal/<slug:schema_name>/reports/', reports_view, name='reports'),
@@ -221,4 +221,11 @@ urlpatterns = [
 
     path('api/gym/attendance/<int:attendance_id>/edit/', api_gym_edit_attendance, name='gym_edit_attendance_api'),
     path('portal/<slug:schema_name>/', tenant_root_redirect, name='tenant_root'),
+
+    # ===== STOCK MANAGEMENT ROUTES =====
+    path('portal/<slug:schema_name>/stock/', portal_wrapper(login_required_for_schema(stock_management)), name='stock_management'),
+    path('portal/<slug:schema_name>/stock/category/add/', portal_wrapper(login_required_for_schema(add_category)), name='add_category'),
+    path('portal/<slug:schema_name>/stock/category/delete/<int:category_id>/', portal_wrapper(login_required_for_schema(delete_category)), name='delete_category'),
+    path('portal/<slug:schema_name>/stock/product/add/', portal_wrapper(login_required_for_schema(add_product)), name='add_product'),
+    path('portal/<slug:schema_name>/stock/product/delete/<int:product_id>/', portal_wrapper(login_required_for_schema(delete_product)), name='delete_product'),
 ]

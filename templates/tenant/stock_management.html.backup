@@ -1,0 +1,346 @@
+{% extends 'tenant/base.html' %}
+{% load static %}
+{% block title %}Stock Management | {{ tenant.name }}{% endblock %}
+{% block body %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Stock Management</h1>
+        <p class="page-desc">Manage product categories and inventory</p>
+    </div>
+</div>
+
+<div class="stock-grid">
+    <!-- Categories Card -->
+    
+<!-- DEBUG BLOCK START -->
+<div style="background: #333; color: #0f0; padding: 10px; margin-bottom: 15px; font-family: monospace; font-size: 12px;">
+    <strong>DEBUG:</strong> Categories in ORM: {{ categories|length }} | Raw SQL: {{ raw_cats|length }}<br>
+    {% if raw_cats %}
+        Raw categories: 
+        {% for cat_id, cat_name, cat_desc in raw_cats %}
+            {{ cat_name }} (id={{ cat_id }}){% if not forloop.last %}, {% endif %}
+        {% endfor %}
+    {% else %}
+        No raw categories found.
+    {% endif %}
+</div>
+<!-- DEBUG BLOCK END -->
+<div class="stock-card">
+        <div class="card-header">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+            <h3>Product Categories</h3>
+            <button class="btn-sm" onclick="openCategoryModal()">+ Add Category</button>
+        </div>
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead><tr><th>Name</th><th>Description</th><th>Actions</th></tr></thead>
+                <tbody>
+                    {% for cat in categories %}
+                    <tr>
+                        <td>{{ cat.name }}</td>
+                        <td>{{ cat.description|default:"—" }}</td>
+                        <td class="action-btns">
+                            <button class="action-icon" onclick="editCategory({{ cat.id }}, '{{ cat.name|escapejs }}', '{{ cat.description|escapejs }}')" title="Edit">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4Z"/></svg>
+                            </button>
+                            <button class="action-icon" onclick="deleteCategory({{ cat.id }}, '{{ cat.name|escapejs }}')" title="Delete">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                            </button>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="3" class="empty-row">No categories yet. Add one.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Products Card -->
+    <div class="stock-card">
+        <div class="card-header">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 7h-4.18A3 3 0 0016 5.18V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v1.18A3 3 0 008.18 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M12 12v4m-2-2h4"/></svg>
+            <h3>Products</h3>
+            <button class="btn-sm" onclick="openProductModal()">+ Add Product</button>
+        </div>
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead><tr><th>SKU</th><th>Name</th><th>Category</th><th>Price (₹)</th><th>Qty</th><th>Actions</th></tr></thead>
+                <tbody>
+                    {% for p in products %}
+                    <tr>
+                        <td><code>{{ p.sku }}</code></td>
+                        <td>{{ p.name }}</td>
+                        <td>{{ p.category.name }}</td>
+                        <td>₹{{ p.selling_price|floatformat:2 }}</td>
+                        <td>{{ p.quantity }}</td>
+                        <td class="action-btns">
+                            <button class="action-icon" onclick="editProduct({{ p.id }}, '{{ p.name|escapejs }}', {{ p.category.id }}, {{ p.selling_price }}, {{ p.quantity }}, '{{ p.notes|escapejs }}')" title="Edit">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4Z"/></svg>
+                            </button>
+                            <button class="action-icon" onclick="deleteProduct({{ p.id }}, '{{ p.name|escapejs }}')" title="Delete">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                            </button>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="empty-row">No products. Add one.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Category Modal -->
+<div id="categoryModal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <span class="close" onclick="closeCategoryModal()">&times;</span>
+        <h3 id="catModalTitle">Add Category</h3>
+        <form method="post" action="{% url 'add_category' schema_name=tenant.schema_name %}" id="categoryForm">
+            {% csrf_token %}
+            <input type="hidden" name="category_id" id="catId">
+            <div class="form-field">
+                <label>Name</label>
+                <input type="text" name="name" id="catName" required>
+            </div>
+            <div class="form-field">
+                <label>Description</label>
+                <textarea name="description" id="catDesc" rows="2"></textarea>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" onclick="closeCategoryModal()">Cancel</button>
+                <button type="submit" class="btn-primary" id="catSubmitBtn">Save Category</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Product Modal -->
+<div id="productModal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <span class="close" onclick="closeProductModal()">&times;</span>
+        <h3 id="prodModalTitle">Add Product</h3>
+        <form method="post" action="{% url 'add_product' schema_name=tenant.schema_name %}" id="productForm">
+            {% csrf_token %}
+            <input type="hidden" name="product_id" id="prodId">
+            <div class="form-field">
+                <label>Category</label>
+                <select name="category" id="prodCategory" required>
+                    {% for cat in categories %}
+                    <option value="{{ cat.id }}">{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-field">
+                <label>Product Name</label>
+                <input type="text" name="name" id="prodName" required>
+            </div>
+            <div class="form-field">
+                <label>Selling Price (₹)</label>
+                <input type="number" step="0.01" name="selling_price" id="prodPrice" required>
+            </div>
+            <div class="form-field">
+                <label>Quantity</label>
+                <input type="number" name="quantity" id="prodQty" required>
+            </div>
+            <div class="form-field">
+                <label>Notes</label>
+                <textarea name="notes" id="prodNotes" rows="2"></textarea>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" onclick="closeProductModal()">Cancel</button>
+                <button type="submit" class="btn-primary" id="prodSubmitBtn">Save Product</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.stock-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+    gap: 1.5rem;
+}
+.stock-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    overflow: hidden;
+}
+.card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: var(--surface-alt);
+    border-bottom: 1px solid var(--border);
+}
+.card-header h3 {
+    flex: 1;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+.btn-sm {
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 2rem;
+    padding: 0.3rem 0.8rem;
+    cursor: pointer;
+    font-size: 0.75rem;
+}
+.modal {
+    position: fixed;
+    top:0;
+    left:0;
+    width:100%;
+    height:100%;
+    background:rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index:1000;
+}
+.modal-content {
+    background: var(--surface);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    max-width: 500px;
+    width: 90%;
+}
+.form-field {
+    margin-bottom: 1rem;
+}
+.form-field label {
+    display: block;
+    font-weight: 600;
+    font-size: 0.8rem;
+    margin-bottom: 0.25rem;
+}
+.form-field input, .form-field select, .form-field textarea {
+    width: 100%;
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    background: var(--surface-alt);
+}
+.modal-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+    margin-top: 1rem;
+}
+.action-icon {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0 0.25rem;
+    color: var(--muted);
+}
+.action-icon:hover {
+    color: var(--primary);
+}
+.close {
+    float: right;
+    cursor: pointer;
+    font-size: 1.5rem;
+    line-height: 1;
+}
+</style>
+
+<script>
+function openCategoryModal(editId, editName, editDesc) {
+    const modal = document.getElementById('categoryModal');
+    const title = document.getElementById('catModalTitle');
+    const idField = document.getElementById('catId');
+    const nameField = document.getElementById('catName');
+    const descField = document.getElementById('catDesc');
+    const submitBtn = document.getElementById('catSubmitBtn');
+    if (editId) {
+        title.innerText = 'Edit Category';
+        idField.value = editId;
+        nameField.value = editName;
+        descField.value = editDesc;
+        submitBtn.innerText = 'Update Category';
+    } else {
+        title.innerText = 'Add Category';
+        idField.value = '';
+        nameField.value = '';
+        descField.value = '';
+        submitBtn.innerText = 'Save Category';
+    }
+    modal.style.display = 'flex';
+}
+function closeCategoryModal() {
+    document.getElementById('categoryModal').style.display = 'none';
+}
+function editCategory(id, name, desc) {
+    openCategoryModal(id, name, desc);
+}
+function deleteCategory(id, name) {
+    if (confirm(`Delete category "${name}"? All products in this category will remain but become orphaned.`)) {
+        const form = document.createElement('form');
+        form.method = 'post';
+        form.action = "{% url 'delete_category' schema_name=tenant.schema_name category_id=0 %}".replace('0', id);
+        form.innerHTML = `{% csrf_token %}`;
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+function openProductModal(editId, editName, editCatId, editPrice, editQty, editNotes) {
+    const modal = document.getElementById('productModal');
+    const title = document.getElementById('prodModalTitle');
+    const idField = document.getElementById('prodId');
+    const nameField = document.getElementById('prodName');
+    const catSelect = document.getElementById('prodCategory');
+    const priceField = document.getElementById('prodPrice');
+    const qtyField = document.getElementById('prodQty');
+    const notesField = document.getElementById('prodNotes');
+    const submitBtn = document.getElementById('prodSubmitBtn');
+    if (editId) {
+        title.innerText = 'Edit Product';
+        idField.value = editId;
+        nameField.value = editName;
+        catSelect.value = editCatId;
+        priceField.value = editPrice;
+        qtyField.value = editQty;
+        notesField.value = editNotes;
+        submitBtn.innerText = 'Update Product';
+    } else {
+        title.innerText = 'Add Product';
+        idField.value = '';
+        nameField.value = '';
+        catSelect.value = '';
+        priceField.value = '';
+        qtyField.value = '';
+        notesField.value = '';
+        submitBtn.innerText = 'Save Product';
+    }
+    modal.style.display = 'flex';
+}
+function closeProductModal() {
+    document.getElementById('productModal').style.display = 'none';
+}
+function editProduct(id, name, catId, price, qty, notes) {
+    openProductModal(id, name, catId, price, qty, notes);
+}
+function deleteProduct(id, name) {
+    if (confirm(`Delete product "${name}"?`)) {
+        const form = document.createElement('form');
+        form.method = 'post';
+        form.action = "{% url 'delete_product' schema_name=tenant.schema_name product_id=0 %}".replace('0', id);
+        form.innerHTML = `{% csrf_token %}`;
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+window.onclick = function(event) {
+    const catModal = document.getElementById('categoryModal');
+    const prodModal = document.getElementById('productModal');
+    if (event.target === catModal) closeCategoryModal();
+    if (event.target === prodModal) closeProductModal();
+}
+</script>
+{% endblock %}
