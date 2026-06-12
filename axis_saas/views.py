@@ -431,54 +431,48 @@ def fee_collection(request, schema_name, student_id=None):
                         record.save()
                         paid_records.append(record)
 
-                    fee_payment = None
-                    if fee_to_apply > 0:
-                        fee_payment = PaymentTransaction.objects.create(
-                            student=student,
-                            amount=fee_to_apply,
-                            payment_mode=payment_mode,
-                            payment_type='full' if fee_to_apply >= Decimal(total_pending) else 'partial',
-                            remarks=(remarks or 'Fee payment').strip() or 'Fee payment',
-                            created_by=request.session.get('school_admin_username', 'admin')
-                        )
-                        fee_payment.fee_records.set(paid_records)
+                    item_details = '; '.join([
+                        f"{product.name} x{qty} @ ₹{product.selling_price} = ₹{line_total}"
+                        for product, qty, line_total in item_breakdown
+                    ]) if item_breakdown else ''
 
-                    item_payment = None
-                    if item_breakdown and item_to_apply > 0:
-                        item_details = '; '.join([
-                            f"{product.name} x{qty} @ ₹{product.selling_price} = ₹{line_total}"
-                            for product, qty, line_total in item_breakdown
-                        ])
-                        item_note = (remarks + '\n' if remarks else '') + 'Items sold: ' + item_details
-                        item_payment = PaymentTransaction.objects.create(
+                    combined_remarks = (remarks or '').strip()
+                    if fee_to_apply > 0 and item_breakdown:
+                        combined_remarks = (combined_remarks + '\n' if combined_remarks else '') + (
+                            f"Fee payment applied: ₹{fee_to_apply:.2f}. Items sold: {item_details}"
+                        )
+                    elif fee_to_apply > 0:
+                        combined_remarks = combined_remarks or 'Fee payment'
+                    elif item_breakdown:
+                        combined_remarks = (combined_remarks + '\n' if combined_remarks else '') + ('Items sold: ' + item_details)
+
+                    payment_record = None
+                    if amount_received > 0:
+                        payment_record = PaymentTransaction.objects.create(
                             student=student,
-                            amount=item_to_apply,
+                            amount=amount_received,
                             payment_mode=payment_mode,
-                            payment_type='partial' if item_to_apply < product_total else 'full',
-                            remarks=item_note,
+                            payment_type='full' if amount_received >= total_due else 'partial',
+                            remarks=combined_remarks or 'Fee and item payment',
                             created_by=request.session.get('school_admin_username', 'admin')
                         )
-                        for product, qty, _ in item_breakdown:
-                            product.quantity -= qty
-                            product.save(update_fields=['quantity'])
-                    elif item_breakdown:
-                        # Keep the selected item list for the receipt and profile summary,
-                        # but do not reduce stock unless the item portion of the payment is actually applied.
-                        pass
+                        if paid_records:
+                            payment_record.fee_records.set(paid_records)
+
+                        if item_breakdown:
+                            for product, qty, _ in item_breakdown:
+                                product.quantity -= qty
+                                product.save(update_fields=['quantity'])
 
                     if amount_received > total_due:
                         messages.info(request, f'Payment received exceeds total due by ₹{(amount_received - total_due):.2f}.')
                     elif amount_received < total_due:
                         messages.info(request, f'Amount received covers pending fee and selected items partially. Remaining balance: ₹{(total_due - amount_received):.2f}.')
 
-                    if fee_payment:
-                        messages.success(request, f"Fee payment of ₹{fee_to_apply} received. Receipt: {fee_payment.receipt_number}")
-                    if item_payment:
-                        messages.success(request, f"Item sale of ₹{product_total} recorded. Receipt: {item_payment.receipt_number}")
-                    if fee_payment:
-                        return redirect('fee_receipt', schema_name=schema_name, receipt_id=fee_payment.id)
-                    if item_payment:
-                        return redirect('fee_receipt', schema_name=schema_name, receipt_id=item_payment.id)
+                    if payment_record:
+                        messages.success(request, f"Payment recorded successfully. Receipt: {payment_record.receipt_number}")
+                        return redirect('fee_receipt', schema_name=schema_name, receipt_id=payment_record.id)
+
                     messages.success(request, 'Payment recorded.')
                     return redirect('fee_collection', schema_name=schema_name, student_id=student.id)
                 except Student.DoesNotExist:
