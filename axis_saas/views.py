@@ -2089,9 +2089,41 @@ def gym_attendance(request, schema_name):
     from django_tenants.utils import schema_context
 
 
-# ==================== STOCK MANAGEMENT VIEWS ====================
+def _extract_item_sales_from_remarks(remarks):
+    """Extract item sale chunks from payment remarks for analytics and detail pages."""
+    import re
+    from decimal import Decimal
 
-@require_tenant_type(['school'])
+    text = remarks or ''
+    marker_match = re.search(r'items sold\s*:\s*(.*)', text, flags=re.IGNORECASE)
+    if not marker_match:
+        marker_match = re.search(r'items sold\s+(.*)', text, flags=re.IGNORECASE)
+
+    candidate_text = marker_match.group(1) if marker_match else text
+    pattern = re.compile(
+        r'(?P<name>.+?)\s*x\s*(?P<qty>\d+)\s*@\s*₹\s*(?P<price>\d+(?:\.\d+)?)\s*=\s*₹\s*(?P<total>\d+(?:\.\d+)?)',
+        flags=re.IGNORECASE,
+    )
+
+    items = []
+    for chunk in re.split(r';\s*', candidate_text):
+        chunk = chunk.strip().strip('.').strip()
+        if not chunk:
+            continue
+        match = pattern.search(chunk)
+        if not match:
+            continue
+        items.append({
+            'name': match.group('name').strip(),
+            'quantity': int(match.group('qty')),
+            'unit_price': Decimal(match.group('price')),
+            'line_total': Decimal(match.group('total')),
+            'raw': chunk,
+        })
+    return items
+
+
+# ==================== STOCK MANAGEMENT VIEWS ====================
 
 @require_tenant_type(['school'])
 def stock_management(request, schema_name):
@@ -2119,22 +2151,105 @@ def stock_management(request, schema_name):
             """)
             raw_products = cursor.fetchall()
 
-        # Debug prints
-        print("="*60)
-        print(f"[DEBUG] Stock view for tenant '{schema_name}'")
-        print(f"  RAW categories: {len(raw_cats)}")
-        print(f"  RAW products:   {len(raw_products)}")
-        for prod in raw_products:
-            print(f"    - {prod[1]} (SKU: {prod[2]}, cat: {prod[7]})")
-        print("="*60)
+        products_qs = Product.objects.select_related('category').all().order_by('category__name', 'name')
+        total_products = products_qs.count()
+        total_categories = ProductCategory.objects.count()
+        total_stock_value = sum((p.selling_price * p.quantity) for p in products_qs)
+        low_stock_count = products_qs.filter(quantity__lt=10).count()
+
+        item_sales = []
+        total_units_sold = 0
+        total_sales_value = Decimal('0.00')
+        product_sales = defaultdict(lambda: {'units': 0, 'value': Decimal('0.00'), 'last_sale': None})
+        for payment in PaymentTransaction.objects.filter(remarks__icontains='items sold').select_related('student').order_by('-payment_date')[:100]:
+            for item in _extract_item_sales_from_remarks(payment.remarks):
+                total_units_sold += item['quantity']
+                total_sales_value += item['line_total']
+                item_sales.append({
+                    'payment': payment,
+                    'item': item,
+                    'student': payment.student,
+                })
+                name = item['name'].strip().lower()
+                entry = product_sales[name]
+                entry['units'] += item['quantity']
+                entry['value'] += item['line_total']
+                if entry['last_sale'] is None or payment.payment_date > entry['last_sale']:
+                    entry['last_sale'] = payment.payment_date
+
+        top_items = []
+        for name, values in product_sales.items():
+            top_items.append({
+                'name': name.title(),
+                'units': values['units'],
+                'value': values['value'],
+                'last_sale': values['last_sale'],
+            })
+        top_items = sorted(top_items, key=lambda entry: (entry['units'], entry['value']), reverse=True)[:6]
 
         context = {
             'tenant': tenant,
             'raw_cats': raw_cats,
             'raw_products': raw_products,
+            'analytics': {
+                'total_products': total_products,
+                'total_categories': total_categories,
+                'total_stock_value': total_stock_value,
+                'low_stock_count': low_stock_count,
+                'total_units_sold': total_units_sold,
+                'total_sales_value': total_sales_value,
+            },
+            'recent_sales': item_sales[:10],
+            'top_items': top_items,
             'logo_url': tenant.school_logo.url if tenant.school_logo else None,
         }
     return render(request, 'tenant/stock_management.html', context)
+
+@require_tenant_type(['school'])
+def product_detail(request, schema_name, product_id):
+    """Detailed product analytics page with sales history and recent receipts."""
+    tenant = get_tenant(request, schema_name)
+    with schema_context(schema_name):
+        product = get_object_or_404(Product.objects.select_related('category'), id=product_id)
+        sales_events = []
+        total_units_sold = 0
+        total_sales_value = Decimal('0.00')
+
+        last_sale_date = None
+        buyer_names = set()
+        for payment in PaymentTransaction.objects.filter(remarks__icontains='items sold').select_related('student').order_by('-payment_date'):
+            for item in _extract_item_sales_from_remarks(payment.remarks):
+                if item['name'].strip().lower() != product.name.strip().lower():
+                    continue
+                total_units_sold += item['quantity']
+                total_sales_value += item['line_total']
+                sales_events.append({
+                    'payment': payment,
+                    'item': item,
+                    'student': payment.student,
+                })
+                if payment.student:
+                    buyer_names.add(payment.student.name)
+                if last_sale_date is None or payment.payment_date > last_sale_date:
+                    last_sale_date = payment.payment_date
+
+        context = {
+            'tenant': tenant,
+            'product': product,
+            'sales_events': sales_events[:50],
+            'analytics': {
+                'total_units_sold': total_units_sold,
+                'total_sales_value': total_sales_value,
+                'stock_value': product.selling_price * product.quantity,
+                'low_stock': product.quantity < 10,
+                'last_sale_date': last_sale_date,
+                'average_sale_value': (total_sales_value / total_units_sold) if total_units_sold else Decimal('0.00'),
+            },
+            'recent_buyers': sorted(buyer_names)[:8],
+            'logo_url': tenant.school_logo.url if tenant.school_logo else None,
+        }
+    return render(request, 'tenant/product_detail.html', context)
+
 
 @require_tenant_type(['school'])
 def add_category(request, schema_name):
