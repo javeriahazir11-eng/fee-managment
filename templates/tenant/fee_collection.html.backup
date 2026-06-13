@@ -21,7 +21,6 @@
         </button>
     </div>
 </div>
-
 <!-- Quick Find Student -->
 <div class="filter-card">
     <div class="card-header">
@@ -33,6 +32,31 @@
         <button id="searchStudentBtn" class="btn-primary">Search</button>
     </div>
     <div id="searchResult" class="search-result" style="display:none;"></div>
+</div>
+<div class="students-list-card" style="margin-top: 1rem;">
+  <div class="card-header">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 7h-4.18A3 3 0 0016 5.18V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v1.18A3 3 0 008.18 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M12 12v4m-2-2h4"/></svg>
+    <h3>School Items & Add-on Products</h3>
+  </div>
+  <p class="page-desc">Select available stock items while collecting fees. Stock quantities reduce automatically on checkout.</p>
+  <div class="item-grid">
+    {% for product in products %}
+      <article class="item-card" data-product-id="{{ product.id }}" data-name="{{ product.name }}" data-price="{{ product.selling_price }}" data-qty="{{ product.quantity }}">
+        <div class="item-chip">{{ product.category.name }}</div>
+        <h4>{{ product.name }}</h4>
+        <p class="item-meta">Price: ₹{{ product.selling_price|floatformat:2 }} • Stock: {{ product.quantity }}</p>
+        <p class="item-meta">{{ product.notes|default:'No notes provided.' }}</p>
+        <button type="button" class="btn-mini add-item-btn">Add to cart</button>
+      </article>
+    {% empty %}
+      <div class="empty-row">No stock items yet. Add products in Stock Management first.</div>
+    {% endfor %}
+  </div>
+  <div class="cart-box">
+    <div class="card-header" style="padding: 0 0 0.35rem 0; border: none; background: transparent;"><h3 style="font-size: 1rem; margin: 0;">Selected Items</h3><span id="cartCount" class="pill-badge">0 items</span></div>
+    <div id="cartItems" class="cart-items">No items selected yet.</div>
+    <div class="cart-total">Item Total: ₹<span id="cartTotal">0.00</span></div>
+  </div>
 </div>
 
 <!-- Students with Pending Fees (Filtered & Paginated) -->
@@ -84,9 +108,9 @@
                 <tr><td colspan="6" class="empty-row">
                     No students with pending fees.
                     {% if total_pending_all == 0 %}
-                        <br><small>🎉 All fees are paid! Use "Generate All Fees" to create fee records for the current month.</small>
+                        <br><small> All fees are paid! Use "Generate All Fees" to create fee records for the current month.</small>
                     {% else %}
-                        <br><small>ℹ️ Some students have no pending fees, but there is a total pending amount of ₹{{ total_pending_all }}. Check if fee records exist.</small>
+                        <br><small>ℹ Some students have no pending fees, but there is a total pending amount of ₹{{ total_pending_all }}. Check if fee records exist.</small>
                     {% endif %}
                 </td>
                 </tr>
@@ -108,7 +132,6 @@
     </div>
     {% endif %}
 </div>
-
 <!-- Selected Student & Payment Form -->
 {% if selected_student %}
 <div class="student-panel" id="studentPanel">
@@ -122,10 +145,10 @@
         </div>
         <div class="pending-badge">Pending: ₹{{ total_pending }}</div>
     </div>
-
     <form method="post" class="payment-form" id="paymentForm">
         {% csrf_token %}
         <input type="hidden" name="student_id" value="{{ selected_student.id }}">
+        <input type="hidden" name="product_items_json" id="productItemsJson" value="[]">
         <div class="form-row">
             <div class="form-field">
                 <label>Amount Received (₹)</label>
@@ -152,7 +175,6 @@
             </div>
         </div>
     </form>
-
     <div class="pending-table">
         <h4>Pending Fee Records</h4>
         <div class="table-responsive">
@@ -189,11 +211,11 @@
     </div>
 </div>
 {% endif %}
-
 <!-- Recent Payments History (single, clean section) -->
 <div class="history-card">
     <div class="card-header">
         <h3>Recent Payments (Last 5)</h3>
+        <a href="{% url 'reports' schema_name=tenant.schema_name %}?type=collection" class="view-all">View All <svg class="inline-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18l6-6-6-6"/></svg></a>
     </div>
     <div class="table-responsive">
         <table class="data-table">
@@ -214,10 +236,11 @@
                 <tr>
                     <td colspan="6" class="empty-row">
                         {% if total_payments_count == 0 %}
-                            <strong>📭 No payments recorded for this school yet.</strong>
-                            <br><small>👉 Use the form above to collect a fee, or click <strong>“Generate All Fees”</strong> to create fee records first.</small>
+                            <strong> No payments recorded for this school yet.</strong>
+                            <br><small> Use the form above to collect a fee, or click <strong>“Generate All Fees”</strong> to create fee records first.</small>
                         {% else %}
-                            <strong>⚠️ There are {{ total_payments_count }} payment(s) in this school’s database, but they are not showing.</strong>
+                            <strong><svg class="inline-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 9v4m0 4h.01"/><path d="M12 2L1 21h22L12 2z"/></svg> There are {{ total_payments_count }} payment(s) in this school’s database, but they are not showing.</strong>
+                            <br><small>This may be because the associated student records are missing. <a href="{% url 'reports' schema_name=tenant.schema_name %}?type=collection&quick_filter=all">View all payments in Reports <svg class="inline-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18l6-6-6-6"/></svg></a></small>
                         {% endif %}
                     </td>
                 </tr>
@@ -226,7 +249,6 @@
         </table>
     </div>
 </div>
-
 <style>
 .header-stats { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
 .stat-badge { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: var(--surface-alt); border-radius: 2rem; font-size: 0.85rem; font-weight: 500; border: 1px solid var(--border); }
@@ -260,8 +282,19 @@
 .page-link { padding: 0.3rem 0.8rem; background: var(--surface-alt); border: 1px solid var(--border); border-radius: 2rem; text-decoration: none; color: var(--text); }
 .page-link:hover { background: var(--primary); color: white; }
 .current-page { padding: 0.3rem 0.8rem; background: var(--primary); color: white; border-radius: 2rem; }
+.item-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+.item-card { background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.9rem; }
+.item-chip { display:inline-flex; padding:0.25rem 0.5rem; border-radius:999px; background: rgba(59,130,246,0.12); color: var(--primary); font-size: .75rem; font-weight: 700; text-transform: uppercase; }
+.item-card h4 { margin: 0.35rem 0; font-size: 1rem; }
+.item-meta { color: var(--muted); font-size: .86rem; line-height: 1.3; }
+.btn-mini { border:none; border-radius:999px; background: var(--primary); color:white; padding: 0.35rem 0.75rem; cursor:pointer; font-size: .85rem; }
+.cart-box { margin-top: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-alt); }
+.cart-item { display:flex; justify-content:space-between; align-items:center; gap:0.6rem; padding:0.35rem 0; border-bottom:1px dashed var(--border); }
+.cart-actions { display:flex; align-items:center; gap:0.35rem; }
+.cart-actions button { border:1px solid var(--border); border-radius:999px; background: var(--surface); color: var(--text); cursor:pointer; width:1.7rem; height:1.7rem; }
+.pill-badge { display:inline-flex; align-items:center; padding:0.25rem 0.6rem; border-radius:999px; background: rgba(14,165,233,0.12); color: var(--primary); font-size: .78rem; font-weight: 700; }
+.cart-total { text-align:right; margin-top:0.5rem; font-weight:700; color: var(--primary); }
 </style>
-
 <script>
 function getCookie(name) {
     let value = null;
@@ -278,12 +311,10 @@ function getCookie(name) {
     return value;
 }
 const csrfToken = getCookie('csrftoken');
-
 function loadStudent(studentId) {
     const url = `/portal/{{ tenant.schema_name }}/fee/collection/${studentId}/`;
     window.location.href = url;
 }
-
 function bindSelectButtons() {
     document.querySelectorAll('.select-student-btn').forEach(btn => {
         btn.removeEventListener('click', window.selectHandler);
@@ -297,12 +328,10 @@ function bindSelectButtons() {
     });
 }
 bindSelectButtons();
-
 // Student search
 const searchInput = document.getElementById('studentSearchInput');
 const searchBtn = document.getElementById('searchStudentBtn');
 const searchResultDiv = document.getElementById('searchResult');
-
 async function performSearch() {
     const q = searchInput.value.trim();
     if (q.length < 2) {
@@ -336,7 +365,6 @@ async function performSearch() {
 }
 searchBtn.addEventListener('click', performSearch);
 searchInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') performSearch(); });
-
 // Remaining amount calculation
 const amountInput = document.getElementById('amountInput');
 const remainingSpan = document.getElementById('remainingAfter');
@@ -350,7 +378,6 @@ if (amountInput && totalPendingSpan) {
     });
     amountInput.dispatchEvent(new Event('input'));
 }
-
 // Generate all fees
 const generateAllBtn = document.getElementById('generateAllBtn');
 if (generateAllBtn) {
@@ -376,7 +403,6 @@ if (generateAllBtn) {
         }
     });
 }
-
 // Generate single fee for current month
 const generateSingleBtn = document.getElementById('generateSingleBtn');
 if (generateSingleBtn) {
@@ -404,7 +430,6 @@ if (generateSingleBtn) {
         }
     });
 }
-
 // Console debug
 console.log('FeeCollection Debug:', {
     recentPaymentsCount: {{ recent_payments|length }},
@@ -412,7 +437,13 @@ console.log('FeeCollection Debug:', {
     pendingTotal: {{ total_pending_all|default:0 }},
     currentTenantSchema: '{{ tenant.schema_name }}'
 });
-
+const itemCart = {};
+function formatMoney(v) { return '₹' + Number(v).toFixed(2); }
+function syncItemCart(){const cartItems=document.getElementById('cartItems');const cartCount=document.getElementById('cartCount');const cartTotal=document.getElementById('cartTotal');const feeItemSummary=document.getElementById('feeItemSummary');const productItemsJson=document.getElementById('productItemsJson');const entries=Object.values(itemCart);if(!entries.length){cartItems.innerHTML='No items selected yet.';cartCount.textContent='0 items';cartTotal.textContent='0.00';feeItemSummary.textContent='₹0.00';productItemsJson.value='[]';return;}let total=0;let html='';entries.forEach(e=>{total += e.price*e.qty; html += '<div class=\"cart-item\"><div><strong>' + e.name + '</strong><br><small>' + e.qty + ' × ₹' + e.price.toFixed(2) + '</small></div><div class=\"cart-actions\"><button type=\"button\" onclick=\"changeCartQty(' + e.id + ' , -1)\">-</button><strong>'+e.qty+'</strong><button type=\"button\" onclick=\"changeCartQty(' + e.id + ' , 1)\">+</button><button type=\"button\" onclick=\"removeFromCart(' + e.id + ' )\" style=\"width:auto;padding: 0 0.4rem;\">×</button></div></div>';});cartItems.innerHTML=html;cartCount.textContent=entries.length + ' item(s)';cartTotal.textContent=total.toFixed(2);feeItemSummary.textContent=formatMoney(total);productItemsJson.value=JSON.stringify(entries.map(e=>({product_id:e.id,quantity:e.qty})));}
+function addToCart(id){const card=document.querySelector('.item-card[data-product-id=\"' + id + '\"]');if(!card)return;const entry=itemCart[id] || {id, name: card.dataset.name, price:Number(card.dataset.price), qty:0};if(entry.qty >= Number(card.dataset.qty)){alert('No more stock available for this item.');return;}entry.qty += 1;itemCart[id]=entry;syncItemCart();}
+function changeCartQty(id,delta){const entry=itemCart[id];if(!entry)return;entry.qty += delta;if(entry.qty <= 0) delete itemCart[id];syncItemCart();}
+function removeFromCart(id){delete itemCart[id];syncItemCart();}
+document.querySelectorAll('.add-item-btn').forEach(btn=>{btn.addEventListener('click',()=>{const card=btn.closest('.item-card');if(card) addToCart(Number(card.dataset.productId));});});
         // Additional debug: if total_payments_count > 0 but recent_payments is empty, show raw payment IDs
         if ({{ total_payments_count|default:0 }} > 0 && {{ recent_payments|length }} === 0) {
             fetch('/api/debug-payments/')
@@ -429,6 +460,5 @@ console.log('FeeCollection Debug:', {
                     }
                 }).catch(e => console.log('Debug fetch failed', e));
         }
-    
 </script>
 {% endblock %}
