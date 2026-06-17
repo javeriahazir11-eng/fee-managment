@@ -1,244 +1,881 @@
 #!/usr/bin/env python3
 """
-Patch collect_fee.html:
-- Redesign the summary cards (Pending Fee, Selected Items, Total Due) with icons and better layout.
-- Move the "Pending Fee Records" table to the bottom of the page.
-- Overall visual polish: cleaner spacing, shadows, and modern card design.
+Patcher: Enhance collect_fee.html with conditional visibility, larger summary,
+and amount input max validation (cannot exceed total due).
+Run: python patch_collect_fee.py
 """
 
-import re
-from pathlib import Path
+import os
+import sys
 
-TEMPLATE_PATH = Path("templates/tenant/collect_fee.html")
+TEMPLATE_PATH = "templates/tenant/collect_fee.html"
 
-if not TEMPLATE_PATH.exists():
-    print(f"❌ File not found: {TEMPLATE_PATH}")
-    exit(1)
+NEW_TEMPLATE = """{% extends 'tenant/base.html' %}
+{% block title %}Collect Fee | {{ student.name }} | {{ tenant.name }}{% endblock %}
 
-with open(TEMPLATE_PATH, "r", encoding="utf-8") as f:
-    content = f.read()
+{% block body %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Collect Fee</h1>
+        <p class="page-desc">{{ student.name }} ({{ student.roll_number }})</p>
+    </div>
+    <div class="header-actions">
+        <a href="{% url 'fee_collection' schema_name=tenant.schema_name %}" class="btn-secondary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 18l-6-6 6-6"/></svg>
+            Back to List
+        </a>
+    </div>
+</div>
 
-# ===================== 1. Replace the mini-summary-grid with a nicer version =====================
-# Find the mini-summary-grid block
-old_summary = """        <div class="mini-summary-grid">
-            <div class="mini-summary-card"><span>Pending Fee</span><strong>₹{{ total_pending|floatformat:2 }}</strong></div>
-            <div class="mini-summary-card"><span>Selected Items</span><strong>₹<span id="miniCartTotal">0.00</span></strong></div>
-            <div class="mini-summary-card"><span>Total Due</span><strong>₹<span id="miniTotalDue">{{ total_pending|floatformat:2 }}</span></strong></div>
-        </div>"""
+<!-- Student Info Card -->
+<div class="student-info-card">
+    <div class="student-avatar">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+    </div>
+    <div class="student-details">
+        <h3>{{ student.name }} <span class="roll">({{ student.roll_number }})</span></h3>
+        <p class="class-info">{{ student.grade }} - {{ student.section }} | Father: {{ student.father_name }} | CNIC: {{ student.father_cnic }}</p>
+    </div>
+    <div class="pending-badge">Pending: ₹{{ total_pending }}</div>
+</div>
 
-new_summary = """        <div class="mini-summary-grid">
-            <div class="mini-summary-card pending-card">
-                <div class="mini-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"/>
-                        <path d="M12 6v6l4 2"/>
-                    </svg>
-                </div>
-                <div class="mini-info">
-                    <span class="mini-label">Pending Fee</span>
-                    <strong class="mini-value">₹{{ total_pending|floatformat:2 }}</strong>
-                </div>
+<!-- Summary Cards -->
+<div class="summary-grid">
+    <div class="summary-card pending-card" id="pendingCard" style="display: {% if total_pending > 0 %}flex{% else %}none{% endif %};">
+        <div class="summary-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        </div>
+        <div class="summary-content">
+            <span class="summary-label">Pending Fee</span>
+            <strong class="summary-value">₹{{ total_pending|floatformat:2 }}</strong>
+        </div>
+    </div>
+    <div class="summary-card items-card" id="itemsCard" style="display: none;">
+        <div class="summary-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 7h-4.18A3 3 0 0016 5.18V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v1.18A3 3 0 008.18 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M12 12v4m-2-2h4"/></svg>
+        </div>
+        <div class="summary-content">
+            <span class="summary-label">Selected Items</span>
+            <strong class="summary-value">₹<span id="miniCartTotal">0.00</span></strong>
+        </div>
+    </div>
+    <div class="summary-card total-card">
+        <div class="summary-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+        </div>
+        <div class="summary-content">
+            <span class="summary-label">Total Due</span>
+            <strong class="summary-value">₹<span id="miniTotalDue">{{ total_pending|floatformat:2 }}</span></strong>
+        </div>
+    </div>
+</div>
+
+<!-- Payment Form -->
+<div class="payment-section">
+    <form method="post" class="payment-form" id="paymentForm">
+        {% csrf_token %}
+        <input type="hidden" name="student_id" value="{{ student.id }}">
+        <input type="hidden" name="product_items_json" id="productItemsJson" value="[]">
+        <div class="form-row">
+            <div class="form-field">
+                <label>Amount Received (₹)</label>
+                <input type="number" name="amount" id="amountInput" step="0.01" min="0" required placeholder="Enter amount">
+                <small class="field-hint">Applied to pending fee first, then items (max: total due)</small>
             </div>
-            <div class="mini-summary-card items-card">
-                <div class="mini-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M20 7h-4.18A3 3 0 0016 5.18V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v1.18A3 3 0 008.18 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/>
-                        <path d="M12 12v4m-2-2h4"/>
-                    </svg>
-                </div>
-                <div class="mini-info">
-                    <span class="mini-label">Selected Items</span>
-                    <strong class="mini-value">₹<span id="miniCartTotal">0.00</span></strong>
-                </div>
+            <div class="form-field">
+                <label>Payment Mode</label>
+                <select name="payment_mode">
+                    <option value="cash">Cash</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="cheque">Cheque</option>
+                    <option value="online">Online</option>
+                </select>
             </div>
-            <div class="mini-summary-card total-card">
-                <div class="mini-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-                    </svg>
-                </div>
-                <div class="mini-info">
-                    <span class="mini-label">Total Due</span>
-                    <strong class="mini-value">₹<span id="miniTotalDue">{{ total_pending|floatformat:2 }}</span></strong>
-                </div>
+            <div class="form-field">
+                <label>Remaining After Payment</label>
+                <input type="text" id="remainingAfter" readonly placeholder="Will be calculated">
             </div>
-        </div>"""
+            <div class="form-field submit-field">
+                <button type="button" id="openItemsDrawerBtn" class="btn-secondary" style="margin-bottom: 0.5rem;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 4v16m8-8H4"/></svg>
+                    Add Items
+                </button>
+                <button type="submit" class="btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
+                    Process Payment
+                </button>
+            </div>
+        </div>
+        <div class="selected-items-summary">
+            <span id="selectedItemsSummary" style="display: none;">
+                Selected Items: <strong id="feeItemSummary" style="font-size: 1.1rem;">₹0.00</strong>
+            </span>
+            <span>
+                Total Due: <strong id="totalDueSummary" style="font-size: 1.1rem;">₹{{ total_pending|floatformat:2 }}</strong>
+            </span>
+        </div>
+    </form>
+</div>
 
-content = content.replace(old_summary, new_summary)
+<!-- Pending Fee Records (moved to bottom) -->
+<div class="pending-table-section">
+    <div class="section-header">
+        <h4>Pending Fee Records</h4>
+        <button type="button" class="btn-generate" id="generateSingleBtn">Generate Current Month Fee</button>
+    </div>
+    <div class="table-responsive">
+        <table class="data-table">
+            <thead>
+                <tr><th>Month/Year</th><th>Amount (₹)</th><th>Paid (₹)</th><th>Remaining (₹)</th><th>Due Date</th></tr>
+            </thead>
+            <tbody>
+                {% for r in pending_records %}
+                <tr>
+                    <td>{{ r.month }}/{{ r.year }}</td>
+                    <td>₹{{ r.amount }}</td>
+                    <td>₹{{ r.paid_amount }}</td>
+                    <td class="remaining">₹{{ r.remaining }}</td>
+                    <td>{{ r.due_date|date:"Y-m-d" }}</td>
+                </tr>
+                {% empty %}
+                <tr id="noPendingRow">
+                    <td colspan="5" class="empty-row">
+                        No pending fees for this student.
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if pending_records %}
+                <tr class="total-row">
+                    <td colspan="3"><strong>Total Pending</strong></td>
+                    <td colspan="2"><strong>₹<span id="totalPending">{{ total_pending }}</span></strong></td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
 
-# ===================== 2. Move the pending fee records table to the bottom =====================
-# Find the pending-table block (inside student-panel)
-# We'll locate the div with class "pending-table" and move it after the payment form and before the closing </div> of student-panel.
-# But we need to remove it from its original position and then insert it at the end.
+<!-- Item Drawer (slides from right) -->
+<div id="itemDrawerOverlay" class="drawer-overlay"></div>
+<div id="itemDrawer" class="drawer">
+    <div class="drawer-header">
+        <div>
+            <h3 style="margin:0;">Select Stock Items</h3>
+            <p class="page-desc" style="margin: 0.2rem 0 0;">Stock quantities reduce automatically when payment is saved.</p>
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+            <button type="button" id="doneDrawerBtn" class="btn-primary">Done</button>
+            <button type="button" id="closeDrawerBtn" class="btn-secondary">Close</button>
+        </div>
+    </div>
+    <div class="drawer-body">
+        <!-- Left: Filters + Product Grid -->
+        <div class="drawer-main">
+            <div class="filter-bar">
+                <div style="flex: 1; min-width: 180px;">
+                    <input type="text" id="itemSearchInput" placeholder="Search by name..." style="width: 100%; padding: 0.5rem 1rem; border-radius: 2rem; border: 1px solid var(--border); background: var(--surface-alt);">
+                </div>
+                <div>
+                    <select id="itemCategoryFilter" style="padding: 0.5rem 1rem; border-radius: 2rem; border: 1px solid var(--border); background: var(--surface-alt);">
+                        <option value="">All Categories</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat.name }}">{{ cat.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="button" id="clearFiltersBtn" class="btn-secondary" style="padding: 0.3rem 1rem;">Clear</button>
+            </div>
+            <div class="item-grid" id="itemGrid">
+                {% for product in products %}
+                <article class="item-card" data-product-id="{{ product.id }}" data-name="{{ product.name }}" data-price="{{ product.selling_price }}" data-qty="{{ product.quantity }}" data-category="{{ product.category.name }}">
+                    <div class="item-chip">{{ product.category.name }}</div>
+                    <h4>{{ product.name }}</h4>
+                    <p class="item-meta">Price: ₹{{ product.selling_price|floatformat:2 }} • Stock: {{ product.quantity }}</p>
+                    <p class="item-meta">{{ product.notes|default:'No notes provided.' }}</p>
+                    <button type="button" class="btn-mini add-item-btn">Add to cart</button>
+                </article>
+                {% empty %}
+                <div class="empty-row">No stock items yet. Add products in Stock Management first.</div>
+                {% endfor %}
+            </div>
+        </div>
+        <!-- Right: Cart Summary (sticky) -->
+        <div class="drawer-cart">
+            <div class="cart-box">
+                <div class="cart-header">
+                    <h4>Your Selection</h4>
+                    <span id="cartCount" class="pill-badge">0 items</span>
+                </div>
+                <div id="cartItems" class="cart-items">No items selected yet.</div>
+                <div class="cart-total">Item Total: ₹<span id="cartTotal">0.00</span></div>
+            </div>
+        </div>
+    </div>
+</div>
 
-# First, find the start of the pending-table block
-pending_start = content.find('<div class="pending-table">')
-if pending_start == -1:
-    print("❌ Could not find pending-table div.")
-    exit(1)
+<style>
+/* ----- Student info ----- */
+.student-info-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    background: var(--surface-alt);
+    padding: 1rem 1.5rem;
+    border-radius: var(--radius);
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--border);
+}
+.student-avatar {
+    width: 48px;
+    height: 48px;
+    background: var(--primary);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    flex-shrink: 0;
+}
+.student-details {
+    flex: 1;
+}
+.student-details h3 {
+    margin: 0;
+    font-size: 1.2rem;
+}
+.student-details .roll {
+    font-weight: 400;
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+.class-info {
+    margin: 0.2rem 0 0;
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+.pending-badge {
+    background: var(--danger);
+    color: white;
+    padding: 0.3rem 1rem;
+    border-radius: 2rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
 
-# Find the matching closing </div> for this block (we'll scan for nested divs)
-depth = 0
-pending_end = pending_start
-i = pending_start
-while i < len(content):
-    if content[i:i+4] == '<div':
-        depth += 1
-    elif content[i:i+6] == '</div>':
-        depth -= 1
-        if depth == 0:
-            pending_end = i + 6
-            break
-    i += 1
-
-if depth != 0:
-    print("❌ Could not find matching closing tag for pending-table.")
-    exit(1)
-
-# Extract the pending-table block
-pending_block = content[pending_start:pending_end]
-
-# Remove it from the original position
-content = content[:pending_start] + content[pending_end:]
-
-# Now find where to insert it: we want it after the payment form and before the closing </div> of student-panel.
-# The student-panel div is the parent; we'll find the closing </div> of student-panel.
-# We'll locate the student-panel opening and then find its matching closing.
-# But easier: we can insert it after the payment form (which is inside student-panel).
-# The payment form ends with </form>. We'll insert after that.
-form_end = content.find('</form>', content.find('id="paymentForm"'))
-if form_end == -1:
-    print("❌ Could not find payment form.")
-    exit(1)
-
-# Insert the pending block after the form
-insert_pos = form_end + len('</form>')
-content = content[:insert_pos] + '\n' + pending_block + content[insert_pos:]
-
-# ===================== 3. Add new CSS for the mini-summary cards =====================
-# We'll append CSS to the existing style block (before </style>).
-# Find the last </style> tag and insert before it.
-css_to_add = """
-/* Mini summary cards - redesigned */
-.mini-summary-grid {
+/* ----- Summary Cards ----- */
+.summary-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 1rem;
-    margin: 1rem 0 1.5rem 0;
+    margin-bottom: 1.5rem;
 }
-.mini-summary-card {
+.summary-card {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     background: var(--surface);
     border-radius: var(--radius);
     border: 1px solid var(--border);
-    padding: 0.75rem 1rem;
+    padding: 1rem 1.25rem;
     box-shadow: var(--shadow-sm);
     transition: transform 0.2s;
 }
-.mini-summary-card:hover {
+.summary-card:hover {
     transform: translateY(-2px);
 }
-.mini-icon {
-    width: 40px;
-    height: 40px;
+.summary-icon {
+    width: 48px;
+    height: 48px;
     border-radius: 2rem;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
 }
-.pending-card .mini-icon {
+.pending-card .summary-icon {
     background: #fef3c7;
     color: #d97706;
 }
-.items-card .mini-icon {
+.items-card .summary-icon {
     background: #dbeafe;
     color: #2563eb;
 }
-.total-card .mini-icon {
+.total-card .summary-icon {
     background: #d1fae5;
     color: #059669;
 }
-.mini-info {
+.summary-content {
     display: flex;
     flex-direction: column;
     line-height: 1.2;
 }
-.mini-label {
-    font-size: 0.7rem;
+.summary-label {
+    font-size: 0.8rem;
     text-transform: uppercase;
     color: var(--muted);
     letter-spacing: 0.5px;
+    font-weight: 600;
 }
-.mini-value {
-    font-size: 1.2rem;
+.summary-value {
+    font-size: 1.5rem;
     font-weight: 700;
     color: var(--text);
 }
-.pending-card .mini-value { color: #d97706; }
-.items-card .mini-value { color: #2563eb; }
-.total-card .mini-value { color: #059669; }
+.pending-card .summary-value { color: #d97706; }
+.items-card .summary-value { color: #2563eb; }
+.total-card .summary-value { color: #059669; }
 
-@media (max-width: 600px) {
-    .mini-summary-grid {
-        grid-template-columns: 1fr;
-    }
+/* ----- Payment Form ----- */
+.payment-section {
+    background: var(--surface);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+.payment-form .form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    align-items: end;
+}
+.form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+.form-field label {
+    font-weight: 600;
+    font-size: 0.8rem;
+}
+.form-field input, .form-field select {
+    padding: 0.6rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    background: var(--surface-alt);
+}
+.submit-field {
+    justify-content: flex-end;
+    display: flex;
+    flex-direction: column;
+}
+.selected-items-summary {
+    margin-top: 1rem;
+    display: flex;
+    gap: 2rem;
+    font-size: 1rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.75rem;
+    align-items: center;
+}
+.selected-items-summary strong {
+    color: var(--primary);
 }
 
-/* Style for the item hero section */
-.item-hero {
+/* ----- Pending Table ----- */
+.pending-table-section {
+    margin-top: 1.5rem;
+    background: var(--surface);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    padding: 1.5rem;
+}
+.section-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    margin-bottom: 1rem;
     flex-wrap: wrap;
-    gap: 1rem;
-    background: var(--surface-alt);
-    padding: 0.75rem 1rem;
-    border-radius: var(--radius);
-    border: 1px solid var(--border);
+    gap: 0.5rem;
 }
-.item-hero .card-header {
-    padding: 0;
+.section-header h4 {
+    margin: 0;
+    font-size: 1rem;
+}
+.btn-generate {
+    background: var(--primary);
+    color: white;
     border: none;
-    background: transparent;
+    border-radius: 2rem;
+    padding: 0.3rem 0.8rem;
+    cursor: pointer;
 }
-.item-hero .card-header h3 {
-    font-size: 1.1rem;
+.table-responsive {
+    overflow-x: auto;
+}
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.data-table th, .data-table td {
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+}
+.data-table th {
+    background: var(--surface-alt);
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+.remaining {
+    font-weight: 700;
+    color: var(--danger);
+}
+.total-row {
+    background: var(--surface-alt);
     font-weight: 600;
 }
-.item-hero .btn-primary {
+.empty-row {
+    text-align: center;
+    padding: 1.5rem;
+    color: var(--muted);
+}
+
+/* ----- Drawer (slide from right) ----- */
+.drawer-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    z-index: 999;
+    display: none;
+    backdrop-filter: blur(4px);
+}
+.drawer-overlay.active {
+    display: block;
+}
+.drawer {
+    position: fixed;
+    top: 0;
+    right: -85%;
+    width: 85%;
+    max-width: 1100px;
+    height: 100%;
+    background: var(--surface);
+    z-index: 1000;
+    box-shadow: -5px 0 25px rgba(0,0,0,0.2);
+    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--border);
+}
+.drawer.open {
+    right: 0;
+}
+.drawer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
 }
-
-/* Pending table at bottom - extra spacing */
-.pending-table {
-    margin-top: 1.5rem;
+.drawer-body {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
 }
+.drawer-main {
+    flex: 2;
+    padding: 1rem;
+    overflow-y: auto;
+}
+.drawer-cart {
+    flex: 1;
+    padding: 1rem;
+    border-left: 1px solid var(--border);
+    background: var(--surface-alt);
+    overflow-y: auto;
+    min-width: 280px;
+}
+.filter-bar {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+.item-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 1rem;
+}
+.item-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    padding: 0.75rem;
+    transition: 0.2s;
+}
+.item-card:hover {
+    box-shadow: var(--shadow);
+    transform: translateY(-2px);
+}
+.item-chip {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    background: rgba(59,130,246,0.12);
+    color: var(--primary);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+.item-card h4 {
+    margin: 0.35rem 0;
+    font-size: 1rem;
+}
+.item-meta {
+    color: var(--muted);
+    font-size: 0.8rem;
+    line-height: 1.3;
+}
+.btn-mini {
+    border: none;
+    border-radius: 999px;
+    background: var(--primary);
+    color: white;
+    padding: 0.3rem 0.7rem;
+    cursor: pointer;
+    font-size: 0.8rem;
+    width: 100%;
+    margin-top: 0.3rem;
+}
+.cart-box {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+}
+.cart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+}
+.cart-header h4 { margin: 0; }
+.pill-badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    background: rgba(14,165,233,0.12);
+    color: var(--primary);
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+.cart-items {
+    max-height: 50vh;
+    overflow-y: auto;
+}
+.cart-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px dashed var(--border);
+}
+.cart-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+.cart-actions button {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    width: 1.7rem;
+    height: 1.7rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.cart-total {
+    text-align: right;
+    margin-top: 0.5rem;
+    font-weight: 700;
+    color: var(--primary);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .summary-grid {
+        grid-template-columns: 1fr;
+    }
+    .drawer {
+        width: 100%;
+        right: -100%;
+    }
+    .drawer-body {
+        flex-direction: column;
+    }
+    .drawer-cart {
+        border-left: none;
+        border-top: 1px solid var(--border);
+        min-width: unset;
+        max-height: 40vh;
+    }
+    .drawer-main {
+        max-height: 60vh;
+    }
+    .payment-form .form-row {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+<script>
+function getCookie(name) {
+    let value = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                value = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return value;
+}
+const csrfToken = getCookie('csrftoken');
+const schema = '{{ tenant.schema_name }}';
+const studentId = {{ student.id }};
+const totalPendingSpan = document.getElementById('totalPending');
+const amountInput = document.getElementById('amountInput');
+const remainingSpan = document.getElementById('remainingAfter');
+const totalDueSummary = document.getElementById('totalDueSummary');
+const selectedItemsSummary = document.getElementById('selectedItemsSummary');
+const feeItemSummary = document.getElementById('feeItemSummary');
+const openDrawerBtn = document.getElementById('openItemsDrawerBtn');
+const closeDrawerBtn = document.getElementById('closeDrawerBtn');
+const doneDrawerBtn = document.getElementById('doneDrawerBtn');
+const drawerOverlay = document.getElementById('itemDrawerOverlay');
+const drawer = document.getElementById('itemDrawer');
+const itemCart = {};
+
+function formatMoney(v) { return '₹' + Number(v).toFixed(2); }
+
+function getBasePendingTotal() {
+    const raw = totalPendingSpan ? totalPendingSpan.innerText : '0';
+    return Number(raw) || 0;
+}
+
+function updateDueSummary() {
+    const pending = getBasePendingTotal();
+    const itemTotal = Number(document.getElementById('cartTotal')?.textContent || 0);
+    const totalDue = pending + itemTotal;
+    if (totalDueSummary) totalDueSummary.textContent = formatMoney(totalDue);
+    // Update amount input max to totalDue
+    if (amountInput) {
+        amountInput.max = totalDue.toFixed(2);
+        // If current value exceeds totalDue, cap it
+        let currentVal = parseFloat(amountInput.value) || 0;
+        if (currentVal > totalDue) {
+            amountInput.value = totalDue.toFixed(2);
+        }
+    }
+    if (amountInput && remainingSpan) {
+        const paid = parseFloat(amountInput.value) || 0;
+        const remaining = Math.max(totalDue - paid, 0);
+        remainingSpan.value = formatMoney(remaining);
+    }
+
+    // Show/hide pending card
+    const pendingCard = document.getElementById('pendingCard');
+    if (pendingCard) {
+        pendingCard.style.display = (pending > 0) ? 'flex' : 'none';
+    }
+    // Show/hide items card and selected items summary
+    const itemsCard = document.getElementById('itemsCard');
+    const selectedSummary = document.getElementById('selectedItemsSummary');
+    if (itemsCard) {
+        itemsCard.style.display = (itemTotal > 0) ? 'flex' : 'none';
+    }
+    if (selectedSummary) {
+        selectedSummary.style.display = (itemTotal > 0) ? 'inline' : 'none';
+    }
+    // Update mini total due
+    const miniTotalDue = document.getElementById('miniTotalDue');
+    if (miniTotalDue) miniTotalDue.textContent = totalDue.toFixed(2);
+}
+
+function syncItemCart() {
+    const cartItems = document.getElementById('cartItems');
+    const cartCount = document.getElementById('cartCount');
+    const cartTotal = document.getElementById('cartTotal');
+    const productItemsJson = document.getElementById('productItemsJson');
+    const miniCartTotal = document.getElementById('miniCartTotal');
+    const entries = Object.values(itemCart);
+    if (!entries.length) {
+        cartItems.innerHTML = 'No items selected yet.';
+        cartCount.textContent = '0 items';
+        cartTotal.textContent = '0.00';
+        productItemsJson.value = '[]';
+        if (miniCartTotal) miniCartTotal.textContent = '0.00';
+        updateDueSummary();
+        return;
+    }
+    let total = 0;
+    let html = '';
+    entries.forEach(e => {
+        total += e.price * e.qty;
+        html += '<div class="cart-item"><div><strong>' + e.name + '</strong><br><small>' + e.qty + ' × ₹' + e.price.toFixed(2) + '</small></div><div class="cart-actions"><button type="button" onclick="changeCartQty(' + e.id + ', -1)">-</button><strong>' + e.qty + '</strong><button type="button" onclick="changeCartQty(' + e.id + ', 1)">+</button><button type="button" onclick="removeFromCart(' + e.id + ')" style="width:auto;padding: 0 0.4rem;">×</button></div></div>';
+    });
+    cartItems.innerHTML = html;
+    cartCount.textContent = entries.length + ' item(s)';
+    cartTotal.textContent = total.toFixed(2);
+    if (miniCartTotal) miniCartTotal.textContent = total.toFixed(2);
+    productItemsJson.value = JSON.stringify(entries.map(e => ({ product_id: e.id, quantity: e.qty })));
+    // Update fee item summary
+    if (feeItemSummary) feeItemSummary.textContent = formatMoney(total);
+    updateDueSummary();
+}
+
+function addToCart(id) {
+    const card = document.querySelector('.item-card[data-product-id="' + id + '"]');
+    if (!card) return;
+    const entry = itemCart[id] || { id, name: card.dataset.name, price: Number(card.dataset.price), qty: 0 };
+    if (entry.qty >= Number(card.dataset.qty)) {
+        alert('No more stock available for this item.');
+        return;
+    }
+    entry.qty += 1;
+    itemCart[id] = entry;
+    syncItemCart();
+}
+
+function changeCartQty(id, delta) {
+    const entry = itemCart[id];
+    if (!entry) return;
+    entry.qty += delta;
+    if (entry.qty <= 0) delete itemCart[id];
+    syncItemCart();
+}
+
+function removeFromCart(id) {
+    delete itemCart[id];
+    syncItemCart();
+}
+
+// Attach add-to-cart events (re-run after dynamic updates)
+function attachAddToCartEvents() {
+    document.querySelectorAll('.add-item-btn').forEach(btn => {
+        btn.removeEventListener('click', addToCartHandler);
+        btn.addEventListener('click', addToCartHandler);
+    });
+}
+function addToCartHandler(e) {
+    const card = e.target.closest('.item-card');
+    if (card) {
+        addToCart(Number(card.dataset.productId));
+    }
+}
+attachAddToCartEvents();
+
+// Drawer controls
+function openDrawer() {
+    drawer.classList.add('open');
+    drawerOverlay.classList.add('active');
+}
+function closeDrawer() {
+    drawer.classList.remove('open');
+    drawerOverlay.classList.remove('active');
+}
+openDrawerBtn.addEventListener('click', openDrawer);
+closeDrawerBtn.addEventListener('click', closeDrawer);
+doneDrawerBtn.addEventListener('click', closeDrawer);
+drawerOverlay.addEventListener('click', closeDrawer);
+
+// Filter products in drawer
+function filterProducts() {
+    const search = document.getElementById('itemSearchInput').value.toLowerCase().trim();
+    const category = document.getElementById('itemCategoryFilter').value;
+    const cards = document.querySelectorAll('.item-card');
+    cards.forEach(card => {
+        const name = card.dataset.name.toLowerCase();
+        const cat = card.dataset.category || '';
+        let show = true;
+        if (search && !name.includes(search)) show = false;
+        if (category && cat !== category) show = false;
+        card.style.display = show ? '' : 'none';
+    });
+}
+document.getElementById('itemSearchInput')?.addEventListener('input', filterProducts);
+document.getElementById('itemCategoryFilter')?.addEventListener('change', filterProducts);
+document.getElementById('clearFiltersBtn')?.addEventListener('click', function() {
+    document.getElementById('itemSearchInput').value = '';
+    document.getElementById('itemCategoryFilter').value = '';
+    filterProducts();
+});
+
+// Amount input: enforce max = totalDue
+amountInput.addEventListener('input', function() {
+    const max = parseFloat(this.max) || 0;
+    let val = parseFloat(this.value) || 0;
+    if (val > max) {
+        this.value = max.toFixed(2);
+    }
+    updateDueSummary();
+});
+
+// Generate single fee (if button exists)
+const generateSingleBtn = document.getElementById('generateSingleBtn');
+if (generateSingleBtn) {
+    generateSingleBtn.addEventListener('click', async () => {
+        if (!confirm(`Generate current month fee for {{ student.name }}?`)) return;
+        generateSingleBtn.disabled = true;
+        generateSingleBtn.innerHTML = 'Generating...';
+        try {
+            const resp = await fetch(`/api/manual-generate-single/?student_id=${studentId}`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+            });
+            const data = await resp.json();
+            if (data.message) alert(data.message);
+            else if (data.error) alert('Error: ' + data.error);
+            location.reload();
+        } catch(e) {
+            console.error('Generation error:', e);
+            alert('Error generating fee: ' + e.message);
+        } finally {
+            generateSingleBtn.disabled = false;
+            generateSingleBtn.innerHTML = 'Generate Current Month Fee';
+        }
+    });
+}
+
+// Initial sync
+syncItemCart();
+updateDueSummary();
+</script>
+{% endblock %}
 """
 
-# Find the last </style> and insert before it
-last_style_pos = content.rfind('</style>')
-if last_style_pos != -1:
-    content = content[:last_style_pos] + css_to_add + '\n' + content[last_style_pos:]
-else:
-    # If no style tag, add one at the end of head (but we'll just append to body)
-    # We'll add a style block before </body>
-    body_end = content.rfind('</body>')
-    if body_end != -1:
-        content = content[:body_end] + f'<style>{css_to_add}</style>\n' + content[body_end:]
+def main():
+    if not os.path.exists(TEMPLATE_PATH):
+        print(f"❌ Template not found at {TEMPLATE_PATH}")
+        sys.exit(1)
 
-# ===================== 4. Minor tweaks: add a divider or spacing =====================
-# We'll also add a subtle separator between the item hero and the payment form
-# But not necessary; we'll rely on the existing spacing.
+    with open(TEMPLATE_PATH, "w") as f:
+        f.write(NEW_TEMPLATE)
 
-# ===================== 5. Write the updated file =====================
-with open(TEMPLATE_PATH, "w", encoding="utf-8") as f:
-    f.write(content)
+    print("✅ Successfully updated templates/tenant/collect_fee.html with enhancements.")
+    print("   - Pending Fee card hides if no pending fee")
+    print("   - Selected Items card hides if no items selected")
+    print("   - Summary lines are larger and more visible")
+    print("   - Amount input caps at total due; negative values disallowed")
+    print("\n👉 Restart your server to see the changes.")
 
-print("✅ collect_fee.html UI patched successfully.")
-print("   - Redesigned summary cards with icons and colors.")
-print("   - Moved pending fee records table to the bottom.")
-print("   - Enhanced visual styling with hover effects and better spacing.")
-print("\n🚀 Restart your server: python manage.py runserver")
+if __name__ == "__main__":
+    main()
