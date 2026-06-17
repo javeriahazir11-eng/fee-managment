@@ -222,7 +222,7 @@ def student_profile(request, schema_name, student_id):
         # fee_paid_total from fee_records
         fee_paid_total = sum(fr.paid_amount for fr in fee_records)
         item_purchase_total = total_paid - fee_paid_total
-        pending_total = total_fee - fee_paid_total
+        pending_total = total_fee + total_items_cost_all - total_paid
 
         context = {
             'tenant': tenant,
