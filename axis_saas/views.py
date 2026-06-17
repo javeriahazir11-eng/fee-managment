@@ -74,7 +74,7 @@ def dashboard(request, schema_name):
         today_collection = PaymentTransaction.objects.filter(payment_date=today).aggregate(Sum('amount'))['amount__sum'] or 0
         month_collection = PaymentTransaction.objects.filter(payment_date__gte=first_day_month).aggregate(Sum('amount'))['amount__sum'] or 0
         pending_records = FeeRecord.objects.all()
-        total_pending = sum(get_overall_pending(s) for s in Student.objects.all())
+        total_pending = sum(fr.remaining for fr in pending_records)
         defaulters_count = Student.objects.filter(fee_records__status__in=['pending', 'partial', 'overdue']).distinct().count()
         total_payments_count = PaymentTransaction.objects.count()
         recent_payments = PaymentTransaction.objects.select_related('student').order_by('-payment_date')[:5]
@@ -379,7 +379,7 @@ def reports(request, schema_name):
         payment_count = payments_qs.count()
 
         pending_records = FeeRecord.objects.all()
-        total_pending = sum(get_overall_pending(s) for s in Student.objects.all())
+        total_pending = sum(fr.remaining for fr in pending_records)
 
         total_collection_all = PaymentTransaction.objects.aggregate(Sum('amount'))['amount__sum'] or Decimal('0')
         total_billed = total_collection_all + total_pending
@@ -501,8 +501,8 @@ def fee_collection(request, schema_name, student_id=None):
                         item_breakdown.append((product, qty, line_total))
 
                     pending_records = student.fee_records.filter(status__in=['pending', 'partial', 'overdue']).order_by('due_date')
-                    total_pending = sum(get_overall_pending(s) for s in Student.objects.all())
-                    total_due = Decimal(total_pending) + product_total
+                    total_pending = get_overall_pending(student)
+                    total_due = total_pending + product_total
 
                     amount_received = amount
                     fee_to_apply = min(amount_received, Decimal(total_pending)) if total_pending else Decimal('0.00')
@@ -579,7 +579,7 @@ def fee_collection(request, schema_name, student_id=None):
             try:
                 student = Student.objects.get(id=student_id)
                 pending_records = student.fee_records.filter(status__in=['pending', 'partial', 'overdue']).order_by('due_date')
-                total_pending = sum(get_overall_pending(s) for s in Student.objects.all())
+                total_pending = get_overall_pending(student)
                 products = list(Product.objects.select_related('category').filter(quantity__gt=0).order_by('category__name', 'name'))
                 categories = list(ProductCategory.objects.all().order_by('name'))
                 context = {
