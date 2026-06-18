@@ -1,181 +1,202 @@
 #!/usr/bin/env python3
 """
-patcher_stock_redesign.py
-Complete redesign of stock_management.html – modern, professional, with clean KPIs,
-filterable product table, and modals. Uses SVG icons only.
-Run: python3 patcher_stock_redesign.py
+Stock Management & Product Detail Patcher
+- Adds K/M/B number formatting to stock management KPIs.
+- Replaces product detail page with a modern, professional design.
+Usage: python3 patch_stock_display.py
 """
 
 import os
 import re
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-TEMPLATE_FILE = os.path.join(BASE_DIR, "templates", "tenant", "stock_management.html")
+# ----------------------------
+# 1. Patch stock_management.html
+# ----------------------------
+STOCK_TEMPLATE = "templates/tenant/stock_management.html"
+
+with open(STOCK_TEMPLATE, "r") as f:
+    stock_content = f.read()
+
+# Add load fee_extras if missing
+if "{% load fee_extras %}" not in stock_content:
+    # Insert after {% extends 'tenant/base.html' %}
+    stock_content = stock_content.replace(
+        "{% extends 'tenant/base.html' %}",
+        "{% extends 'tenant/base.html' %}\n{% load fee_extras %}"
+    )
+    print("✅ Added {% load fee_extras %} to stock_management.html")
+
+# Replace KPI values with humanize filter
+replacements = {
+    r'<div class="kpi-value">{{ analytics\.total_products }}</div>': '<div class="kpi-value">{{ analytics.total_products|humanize_number }}</div>',
+    r'<div class="kpi-value">{{ analytics\.total_categories }}</div>': '<div class="kpi-value">{{ analytics.total_categories|humanize_number }}</div>',
+    r'<div class="kpi-value">₹{{ analytics\.total_stock_value\|floatformat:2 }}</div>': '<div class="kpi-value">₹{{ analytics.total_stock_value|humanize_number }}</div>',
+    r'<div class="kpi-value">{{ analytics\.low_stock_count }}</div>': '<div class="kpi-value">{{ analytics.low_stock_count|humanize_number }}</div>',
+    r'<div class="kpi-value">{{ analytics\.total_units_sold }}</div>': '<div class="kpi-value">{{ analytics.total_units_sold|humanize_number }}</div>',
+    r'<div class="kpi-value">₹{{ analytics\.total_sales_value\|floatformat:2 }}</div>': '<div class="kpi-value">₹{{ analytics.total_sales_value|humanize_number }}</div>',
+}
+
+for pattern, replacement in replacements.items():
+    stock_content = re.sub(pattern, replacement, stock_content)
+
+with open(STOCK_TEMPLATE, "w") as f:
+    f.write(stock_content)
+print("✅ Applied K/M/B formatting to stock management KPIs")
 
 
-def patch_template():
-    """Replace stock_management.html with a fully redesigned version."""
-    if not os.path.exists(TEMPLATE_FILE):
-        print(f"❌ Template not found at {TEMPLATE_FILE}")
-        return False
+# ----------------------------
+# 2. Replace product_detail.html
+# ----------------------------
+PRODUCT_DETAIL_TEMPLATE = "templates/tenant/product_detail.html"
 
-    new_template = """{% extends 'tenant/base.html' %}
-{% load static %}
-{% block title %}Stock Management | {{ tenant.name }}{% endblock %}
+NEW_PRODUCT_DETAIL = """{% extends 'tenant/base.html' %}
+{% load fee_extras %}
+{% block title %}{{ product.name }} | Stock Details{% endblock %}
 
-{% block extra_head %}
-{{ block.super }}
+{% block body %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">{{ product.name }}</h1>
+        <p class="page-desc">SKU: {{ product.sku }} • Category: {{ product.category.name }}</p>
+    </div>
+    <div class="header-actions">
+        <a href="{% url 'stock_management' schema_name=tenant.schema_name %}" class="btn-secondary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 18l-6-6 6-6"/></svg>
+            Back to Stock
+        </a>
+    </div>
+</div>
+
+<!-- Summary Grid -->
+<div class="summary-grid">
+    <div class="summary-card"><span class="summary-label">Current Stock</span><strong class="summary-value">{{ product.quantity|humanize_number }}</strong></div>
+    <div class="summary-card"><span class="summary-label">Unit Price</span><strong class="summary-value">₹{{ product.selling_price|floatformat:2 }}</strong></div>
+    <div class="summary-card"><span class="summary-label">Stock Value</span><strong class="summary-value">₹{{ analytics.stock_value|humanize_number }}</strong></div>
+    <div class="summary-card"><span class="summary-label">Units Sold</span><strong class="summary-value">{{ analytics.total_units_sold|humanize_number }}</strong></div>
+    <div class="summary-card"><span class="summary-label">Sales Value</span><strong class="summary-value">₹{{ analytics.total_sales_value|humanize_number }}</strong></div>
+    <div class="summary-card"><span class="summary-label">Avg. Sale</span><strong class="summary-value">₹{{ analytics.average_sale_value|floatformat:2 }}</strong></div>
+    <div class="summary-card"><span class="summary-label">Last Sale</span><strong class="summary-value">{% if analytics.last_sale_date %}{{ analytics.last_sale_date|date:"d M Y" }}{% else %}—{% endif %}</strong></div>
+    <div class="summary-card"><span class="summary-label">Status</span><strong class="summary-value {% if analytics.low_stock %}status-low{% else %}status-healthy{% endif %}">{% if analytics.low_stock %}Low Stock{% else %}Healthy{% endif %}</strong></div>
+</div>
+
+<!-- Details & Sales History -->
+<div class="detail-grid">
+    <!-- Product Notes & Buyers -->
+    <div class="detail-card">
+        <div class="card-header">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+            <h3>Product Notes</h3>
+        </div>
+        <div class="card-body">
+            {{ product.notes|default:"No notes added." }}
+        </div>
+    </div>
+
+    <div class="detail-card">
+        <div class="card-header">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <h3>Recent Buyers</h3>
+        </div>
+        <div class="card-body">
+            {% if recent_buyers %}
+                <ul class="buyer-list">
+                    {% for buyer in recent_buyers %}
+                        <li><a href="{% url 'student_profile' schema_name=tenant.schema_name student_id=buyer.id %}#payment-history" style="color: var(--primary); text-decoration: none;">{{ buyer.name }}</a></li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p class="empty-text">No buyers yet.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Sales History Table -->
+<div class="table-card">
+    <div class="table-header">
+        <h3>Sales History</h3>
+        <span class="badge">{{ sales_events|length }} transactions</span>
+    </div>
+    <div class="table-responsive">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Student</th>
+                    <th>Quantity</th>
+                    <th>Amount (₹)</th>
+                    <th>Receipt</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for event in sales_events %}
+                <tr>
+                    <td>{{ event.payment.payment_date|date:"d M Y" }}</td>
+                    <td><a href="{% url 'student_profile' schema_name=tenant.schema_name student_id=event.student.id %}#payment-history" style="color: var(--primary); text-decoration: none; font-weight: 600;">{{ event.student.name }}</a></td>
+                    <td>{{ event.item.quantity }}</td>
+                    <td>₹{{ event.item.line_total|floatformat:2 }}</td>
+                    <td><a href="/portal/{{ tenant.schema_name }}/fee/receipt/{{ event.payment.id }}/" class="receipt-link" target="_blank">{{ event.payment.receipt_number }}</a></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="empty-row">No sales recorded for this product yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Product Actions (optional) -->
+<div class="action-row">
+    <a href="{% url 'stock_management' schema_name=tenant.schema_name %}" class="btn-secondary">← Back to Stock</a>
+</div>
+
 <style>
-    /* ---- Page header ---- */
-    .page-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1.5rem;
-        flex-wrap: wrap;
-        gap: 1rem;
-    }
-    .page-title {
-        font-size: 1.8rem;
-        font-weight: 700;
-        background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-        margin: 0;
-    }
-    .page-desc {
-        color: var(--muted);
-        margin: 0.2rem 0 0;
-    }
-    .header-actions {
-        display: flex;
-        gap: 0.75rem;
-        flex-wrap: wrap;
-    }
-    .btn-primary, .btn-secondary {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem 1rem;
-        border-radius: 2rem;
-        font-weight: 500;
-        font-size: 0.85rem;
-        text-decoration: none;
-        transition: all 0.2s;
-        border: none;
-        cursor: pointer;
-        background: var(--surface-alt);
-        color: var(--text);
-        border: 1px solid var(--border);
-    }
-    .btn-primary {
-        background: var(--primary);
-        color: white;
-        border: none;
-    }
-    .btn-primary:hover {
-        background: var(--primary-dark);
-        transform: translateY(-1px);
-    }
-    .btn-secondary:hover {
-        background: var(--surface);
-    }
-    .btn-sm {
-        background: var(--primary);
-        color: white;
-        border: none;
-        border-radius: 2rem;
-        padding: 0.2rem 0.8rem;
-        font-size: 0.75rem;
-        cursor: pointer;
-        transition: 0.2s;
-    }
-    .btn-sm:hover {
-        background: var(--primary-dark);
-    }
-    .btn-sm.outline {
-        background: transparent;
-        color: var(--primary);
-        border: 1px solid var(--primary);
-    }
-    .btn-sm.outline:hover {
-        background: var(--primary);
-        color: white;
-    }
-
-    /* ---- KPI Grid ---- */
-    .kpi-grid {
+    /* Summary Grid */
+    .summary-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
         gap: 1rem;
         margin-bottom: 1.5rem;
     }
-    .kpi-card {
+    .summary-card {
         background: var(--surface);
-        border-radius: var(--radius);
         border: 1px solid var(--border);
+        border-radius: var(--radius);
         padding: 1rem;
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        transition: all 0.2s;
-        cursor: pointer;
-        box-shadow: var(--shadow-sm);
+        text-align: center;
+        transition: transform 0.2s;
     }
-    .kpi-card:hover {
-        transform: translateY(-3px);
-        box-shadow: var(--shadow);
-        border-color: var(--primary);
+    .summary-card:hover {
+        transform: translateY(-2px);
     }
-    .kpi-icon {
-        width: 44px;
-        height: 44px;
-        border-radius: 2rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        flex-shrink: 0;
-    }
-    .kpi-icon.blue { background: #3b82f6; }
-    .kpi-icon.green { background: #10b981; }
-    .kpi-icon.orange { background: #f59e0b; }
-    .kpi-icon.red { background: #ef4444; }
-    .kpi-icon.purple { background: #8b5cf6; }
-    .kpi-icon.teal { background: #14b8a6; }
-
-    .kpi-info {
-        flex: 1;
-        min-width: 0;
-    }
-    .kpi-label {
+    .summary-label {
+        display: block;
         font-size: 0.7rem;
         text-transform: uppercase;
         color: var(--muted);
         letter-spacing: 0.5px;
-        font-weight: 600;
+        margin-bottom: 0.25rem;
     }
-    .kpi-value {
-        font-size: 1.4rem;
+    .summary-value {
+        font-size: 1.25rem;
         font-weight: 700;
-        line-height: 1.2;
         color: var(--text);
     }
-    .kpi-sub {
-        font-size: 0.65rem;
-        color: var(--muted);
-        margin-top: 0.1rem;
-    }
+    .status-low { color: var(--danger); }
+    .status-healthy { color: #10b981; }
 
-    /* ---- Stock Card (products) ---- */
-    .stock-card {
-        background: var(--surface);
-        border-radius: var(--radius);
-        border: 1px solid var(--border);
-        overflow: hidden;
+    /* Detail Grid */
+    .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 1.5rem;
         margin-bottom: 1.5rem;
-        box-shadow: var(--shadow-sm);
+    }
+    .detail-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
     }
     .card-header {
         display: flex;
@@ -186,91 +207,56 @@ def patch_template():
         border-bottom: 1px solid var(--border);
     }
     .card-header h3 {
-        flex: 1;
-        font-size: 1.1rem;
-        font-weight: 600;
         margin: 0;
+        font-size: 1rem;
+        font-weight: 600;
     }
-    .card-header .actions {
-        display: flex;
-        gap: 0.5rem;
+    .card-body {
+        padding: 1rem;
+        line-height: 1.5;
+        color: var(--text);
+    }
+    .buyer-list {
+        margin: 0;
+        padding-left: 1.2rem;
+    }
+    .buyer-list li {
+        margin-bottom: 0.3rem;
+    }
+    .empty-text {
+        color: var(--muted);
+        font-size: 0.9rem;
     }
 
-    /* ---- Filters ---- */
-    .filters-bar {
+    /* Table Card */
+    .table-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+        margin-bottom: 1.5rem;
+    }
+    .table-header {
         display: flex;
-        flex-wrap: wrap;
-        gap: 0.75rem;
-        align-items: flex-end;
+        justify-content: space-between;
+        align-items: center;
         padding: 0.75rem 1rem;
         background: var(--surface-alt);
         border-bottom: 1px solid var(--border);
     }
-    .filter-group {
-        display: flex;
-        flex-direction: column;
-        gap: 0.2rem;
-        flex: 1;
-        min-width: 120px;
-    }
-    .filter-group label {
-        font-size: 0.65rem;
-        text-transform: uppercase;
-        color: var(--muted);
+    .table-header h3 {
+        margin: 0;
+        font-size: 1rem;
         font-weight: 600;
-        letter-spacing: 0.3px;
     }
-    .filter-group input,
-    .filter-group select {
-        padding: 0.4rem 0.6rem;
-        border-radius: 0.5rem;
-        border: 1px solid var(--border);
-        background: var(--surface);
-        color: var(--text);
-        font-size: 0.85rem;
-        width: 100%;
-        transition: 0.2s;
-    }
-    .filter-group input:focus,
-    .filter-group select:focus {
-        outline: none;
-        border-color: var(--primary);
-        box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
-    }
-    .filter-group.search-input {
-        flex: 2;
-        min-width: 180px;
-    }
-    .filter-actions {
-        display: flex;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-    }
-    .btn-filter, .btn-reset {
-        padding: 0.4rem 1rem;
-        border-radius: 2rem;
-        font-weight: 500;
-        border: none;
-        cursor: pointer;
-        transition: 0.2s;
-    }
-    .btn-filter {
+    .badge {
         background: var(--primary);
         color: white;
+        padding: 0.2rem 0.6rem;
+        border-radius: 2rem;
+        font-size: 0.75rem;
+        font-weight: 500;
     }
-    .btn-filter:hover {
-        background: var(--primary-dark);
-    }
-    .btn-reset {
-        background: var(--surface-alt);
-        color: var(--text);
-        border: 1px solid var(--border);
-    }
-    .btn-reset:hover {
-        background: var(--surface);
-    }
-
-    /* ---- Products Table ---- */
     .table-responsive {
         overflow-x: auto;
     }
@@ -279,7 +265,7 @@ def patch_template():
         border-collapse: collapse;
     }
     .data-table th, .data-table td {
-        padding: 0.65rem 0.75rem;
+        padding: 0.75rem 1rem;
         text-align: left;
         border-bottom: 1px solid var(--border);
         font-size: 0.85rem;
@@ -287,1004 +273,57 @@ def patch_template():
     .data-table th {
         background: var(--surface-alt);
         font-weight: 600;
-        font-size: 0.7rem;
+        font-size: 0.75rem;
         text-transform: uppercase;
         color: var(--muted);
-        cursor: pointer;
-        user-select: none;
-        white-space: nowrap;
     }
-    .data-table th:hover {
-        background: var(--surface);
-    }
-    .data-table td .price {
-        font-weight: 600;
-        color: var(--primary);
-    }
-    .data-table td .qty {
-        font-weight: 600;
-    }
-    .data-table td .qty.low {
-        color: var(--danger);
-    }
-    .data-table .action-btns {
-        display: flex;
-        gap: 0.3rem;
-        align-items: center;
-    }
-    .data-table .action-icon {
-        background: none;
-        border: none;
-        cursor: pointer;
-        padding: 0.2rem;
-        color: var(--muted);
-        transition: 0.2s;
-        border-radius: 0.3rem;
-        display: inline-flex;
-        align-items: center;
-    }
-    .data-table .action-icon:hover {
-        color: var(--primary);
-        background: var(--surface-alt);
-    }
-    .data-table .eye-btn {
+    .receipt-link {
         color: var(--primary);
         text-decoration: none;
-        display: inline-flex;
+        font-family: monospace;
     }
     .empty-row {
         text-align: center;
+        color: var(--muted);
         padding: 2rem;
-        color: var(--muted);
-        font-size: 0.9rem;
-    }
-    .empty-row svg {
-        opacity: 0.4;
-        margin-bottom: 0.5rem;
     }
 
-    /* ---- Pagination ---- */
-    .pagination-bar {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 0.75rem 1rem;
-        border-top: 1px solid var(--border);
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        background: var(--surface-alt);
-    }
-    .pagination-info {
-        font-size: 0.8rem;
-        color: var(--muted);
-    }
-    .pagination-info strong {
-        color: var(--text);
-    }
-    .pagination-links {
-        display: flex;
-        gap: 0.3rem;
-        align-items: center;
-        flex-wrap: wrap;
-    }
-    .page-link {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 2rem;
-        height: 2rem;
-        padding: 0 0.5rem;
-        border-radius: 0.5rem;
-        border: 1px solid var(--border);
-        background: var(--surface);
-        color: var(--text);
-        text-decoration: none;
-        font-size: 0.8rem;
-        font-weight: 500;
-        transition: 0.2s;
-        cursor: pointer;
-    }
-    .page-link:hover {
-        background: var(--primary);
-        color: white;
-        border-color: var(--primary);
-    }
-    .page-link.active {
-        background: var(--primary);
-        color: white;
-        border-color: var(--primary);
-    }
-    .page-link.disabled {
-        opacity: 0.4;
-        pointer-events: none;
-    }
-
-    /* ---- Two-column layout (Fast Movers + Recent Sales) ---- */
-    .stock-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-        gap: 1.5rem;
-        margin-bottom: 1.5rem;
-    }
-    .stock-card-inner {
-        background: var(--surface);
-        border-radius: var(--radius);
-        border: 1px solid var(--border);
-        overflow: hidden;
-        box-shadow: var(--shadow-sm);
-    }
-    .stock-card-inner .card-header {
-        background: var(--surface-alt);
-        border-bottom: 1px solid var(--border);
-    }
-    .stock-card-inner .data-table td,
-    .stock-card-inner .data-table th {
-        font-size: 0.8rem;
-        padding: 0.5rem 0.75rem;
-    }
-
-    /* ---- Modals ---- */
-    .modal-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0,0,0,0.5);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
-        visibility: hidden;
-        opacity: 0;
-        transition: all 0.2s;
-    }
-    .modal-overlay.active {
-        visibility: visible;
-        opacity: 1;
-    }
-    .modal-container {
-        background: var(--surface);
-        border-radius: var(--radius);
-        max-width: 600px;
-        width: 90%;
-        max-height: 85vh;
-        overflow-y: auto;
-        padding: 1.5rem;
-        border: 1px solid var(--border);
-        box-shadow: var(--shadow);
-    }
-    .modal-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 1px solid var(--border);
-    }
-    .modal-header h3 {
-        margin: 0;
-        font-size: 1.2rem;
-        font-weight: 600;
-    }
-    .close-modal {
-        background: none;
-        border: none;
-        font-size: 1.5rem;
-        cursor: pointer;
-        color: var(--muted);
-        line-height: 1;
-    }
-    .close-modal:hover {
-        color: var(--text);
-    }
-    .form-field {
-        margin-bottom: 1rem;
-    }
-    .form-field label {
-        display: block;
-        font-weight: 600;
-        font-size: 0.85rem;
-        margin-bottom: 0.25rem;
-    }
-    .form-field input,
-    .form-field select,
-    .form-field textarea {
-        width: 100%;
-        padding: 0.5rem;
-        border-radius: 0.5rem;
-        border: 1px solid var(--border);
-        background: var(--surface-alt);
-        color: var(--text);
-        font-size: 0.9rem;
-    }
-    .form-field input:focus,
-    .form-field select:focus,
-    .form-field textarea:focus {
-        outline: none;
-        border-color: var(--primary);
-        box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
-    }
-    .modal-actions {
-        display: flex;
-        gap: 0.5rem;
-        justify-content: flex-end;
-        margin-top: 1rem;
-    }
-    .btn-primary, .btn-secondary {
-        padding: 0.5rem 1rem;
-        border-radius: 2rem;
-        font-weight: 600;
-        border: none;
-        cursor: pointer;
-        transition: 0.2s;
-    }
-    .btn-primary {
-        background: var(--primary);
-        color: white;
-    }
-    .btn-primary:hover {
-        background: var(--primary-dark);
+    .action-row {
+        text-align: right;
     }
     .btn-secondary {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        border-radius: 2rem;
         background: var(--surface-alt);
         color: var(--text);
         border: 1px solid var(--border);
+        text-decoration: none;
+        font-weight: 500;
+        transition: 0.2s;
     }
     .btn-secondary:hover {
         background: var(--surface);
     }
 
-    /* ---- Responsive ---- */
+    /* Responsive */
     @media (max-width: 768px) {
-        .kpi-grid {
+        .summary-grid {
             grid-template-columns: repeat(2, 1fr);
         }
-        .stock-grid {
+        .detail-grid {
             grid-template-columns: 1fr;
-        }
-        .filters-bar {
-            flex-direction: column;
-            align-items: stretch;
-        }
-        .filter-group {
-            min-width: 100%;
-        }
-        .filter-actions {
-            justify-content: stretch;
-        }
-        .filter-actions .btn-filter,
-        .filter-actions .btn-reset {
-            flex: 1;
-            text-align: center;
-        }
-        .data-table th, .data-table td {
-            padding: 0.4rem 0.5rem;
-            font-size: 0.75rem;
-        }
-        .pagination-bar {
-            flex-direction: column;
-            align-items: stretch;
-            text-align: center;
-        }
-        .pagination-links {
-            justify-content: center;
-        }
-    }
-    @media (max-width: 480px) {
-        .kpi-grid {
-            grid-template-columns: 1fr 1fr;
-        }
-        .kpi-card {
-            padding: 0.75rem;
-        }
-        .kpi-value {
-            font-size: 1.1rem;
-        }
-        .kpi-icon {
-            width: 36px;
-            height: 36px;
         }
     }
 </style>
 {% endblock %}
+"""
 
-{% block body %}
-<!-- ====== PAGE HEADER ====== -->
-<div class="page-header">
-    <div>
-        <h1 class="page-title">Stock Management</h1>
-        <p class="page-desc">Manage products, track inventory, and view sales</p>
-    </div>
-    <div class="header-actions">
-        <button class="btn-primary" onclick="openCategoriesModal()">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-            Categories
-        </button>
-        <a href="{% url 'sell_separately' schema_name=tenant.schema_name %}" class="btn-primary" style="background:#10b981;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
-            Sell Separately
-        </a>
-    </div>
-</div>
+with open(PRODUCT_DETAIL_TEMPLATE, "w") as f:
+    f.write(NEW_PRODUCT_DETAIL)
+print("✅ Replaced product_detail.html with modern design")
 
-<!-- ====== KPI CARDS (clickable) ====== -->
-<div class="kpi-grid">
-    <div class="kpi-card" data-filter="all">
-        <div class="kpi-icon blue"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M20 7h-4.18A3 3 0 0016 5.18V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v1.18A3 3 0 008.18 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M12 12v4m-2-2h4"/></svg></div>
-        <div class="kpi-info">
-            <div class="kpi-label">Total Products</div>
-            <div class="kpi-value">{{ analytics.total_products }}</div>
-            <div class="kpi-sub">All items</div>
-        </div>
-    </div>
-    <div class="kpi-card" data-filter="categories">
-        <div class="kpi-icon purple"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg></div>
-        <div class="kpi-info">
-            <div class="kpi-label">Categories</div>
-            <div class="kpi-value">{{ analytics.total_categories }}</div>
-            <div class="kpi-sub">Product groups</div>
-        </div>
-    </div>
-    <div class="kpi-card" data-filter="stock_value">
-        <div class="kpi-icon green"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></div>
-        <div class="kpi-info">
-            <div class="kpi-label">Stock Value</div>
-            <div class="kpi-value">₹{{ analytics.total_stock_value|floatformat:2 }}</div>
-            <div class="kpi-sub">Total inventory worth</div>
-        </div>
-    </div>
-    <div class="kpi-card" data-filter="low_stock">
-        <div class="kpi-icon red"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
-        <div class="kpi-info">
-            <div class="kpi-label">Low Stock</div>
-            <div class="kpi-value">{{ analytics.low_stock_count }}</div>
-            <div class="kpi-sub">Items < 10</div>
-        </div>
-    </div>
-    <div class="kpi-card" data-filter="units_sold">
-        <div class="kpi-icon orange"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M3 12h3l3-9 3 18 3-9h3"/></svg></div>
-        <div class="kpi-info">
-            <div class="kpi-label">Units Sold</div>
-            <div class="kpi-value">{{ analytics.total_units_sold }}</div>
-            <div class="kpi-sub">All time</div>
-        </div>
-    </div>
-    <div class="kpi-card" data-filter="sales_value">
-        <div class="kpi-icon teal"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg></div>
-        <div class="kpi-info">
-            <div class="kpi-label">Sales Value</div>
-            <div class="kpi-value">₹{{ analytics.total_sales_value|floatformat:2 }}</div>
-            <div class="kpi-sub">Total revenue</div>
-        </div>
-    </div>
-</div>
-
-<!-- ====== PRODUCTS CARD ====== -->
-<div class="stock-card">
-    <div class="card-header">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7h-4.18A3 3 0 0016 5.18V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v1.18A3 3 0 008.18 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M12 12v4m-2-2h4"/></svg>
-        <h3>Products</h3>
-        <div class="actions">
-            <button class="btn-sm" onclick="openProductModal()">+ Add Product</button>
-        </div>
-    </div>
-
-    <!-- Filters -->
-    <div class="filters-bar">
-        <div class="filter-group search-input">
-            <label>🔍 Search</label>
-            <input type="text" id="searchInput" placeholder="Name or SKU...">
-        </div>
-        <div class="filter-group">
-            <label>Category</label>
-            <select id="categoryFilter">
-                <option value="">All</option>
-                {% for cat in raw_cats %}
-                <option value="{{ cat.1 }}">{{ cat.1 }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="filter-group">
-            <label>Min Price (₹)</label>
-            <input type="number" id="minPrice" step="0.01" placeholder="Min">
-        </div>
-        <div class="filter-group">
-            <label>Max Price (₹)</label>
-            <input type="number" id="maxPrice" step="0.01" placeholder="Max">
-        </div>
-        <div class="filter-group">
-            <label>Min Stock</label>
-            <input type="number" id="minStock" placeholder="Min">
-        </div>
-        <div class="filter-group">
-            <label>Max Stock</label>
-            <input type="number" id="maxStock" placeholder="Max">
-        </div>
-        <div class="filter-actions">
-            <button id="applyFiltersBtn" class="btn-filter">Apply</button>
-            <button id="resetFiltersBtn" class="btn-reset">Reset</button>
-        </div>
-    </div>
-
-    <!-- Table -->
-    <div class="table-responsive">
-        <table class="data-table" id="productsTable">
-            <thead>
-                <tr>
-                    <th data-sort="sku">SKU <span class="sort-icon"></span></th>
-                    <th data-sort="name">Name <span class="sort-icon"></span></th>
-                    <th data-sort="category">Category <span class="sort-icon"></span></th>
-                    <th data-sort="price">Price (₹) <span class="sort-icon"></span></th>
-                    <th data-sort="qty">Qty <span class="sort-icon"></span></th>
-                    <th>Details</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="productsTbody">
-                {% for p in raw_products %}
-                <tr data-sku="{{ p.2|lower }}" data-name="{{ p.1|lower }}" data-category="{{ p.7 }}" data-price="{{ p.3 }}" data-qty="{{ p.4 }}" data-id="{{ p.0 }}">
-                    <td><code>{{ p.2 }}</code></td>
-                    <td><a href="{% url 'product_detail' schema_name=tenant.schema_name product_id=p.0 %}" style="color: var(--primary); text-decoration: none; font-weight: 600;">{{ p.1 }}</a></td>
-                    <td>{{ p.7 }}</td>
-                    <td class="price">₹{{ p.3|floatformat:2 }}</td>
-                    <td class="qty {% if p.4 < 10 %}low{% endif %}">{{ p.4 }}</td>
-                    <td><a href="{% url 'product_detail' schema_name=tenant.schema_name product_id=p.0 %}" class="eye-btn" title="View Details"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg></a></td>
-                    <td class="action-btns">
-                        <button class="action-icon" onclick="editProduct({{ p.0 }}, '{{ p.1|escapejs }}', {{ p.6 }}, {{ p.3 }}, {{ p.4 }}, '{{ p.5|escapejs }}')" title="Edit">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4Z"/></svg>
-                        </button>
-                        <button class="action-icon" onclick="deleteProduct({{ p.0 }}, '{{ p.1|escapejs }}')" title="Delete">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                        </button>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr class="empty-row"><td colspan="7">No products found. <button class="btn-sm outline" onclick="openProductModal()">Add one</button></td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
-    <!-- Pagination -->
-    <div class="pagination-bar" id="paginationControls">
-        <div class="pagination-info" id="paginationInfo"></div>
-        <div class="pagination-links" id="paginationLinks"></div>
-    </div>
-</div>
-
-<!-- ====== FAST MOVERS & RECENT SALES ====== -->
-<div class="stock-grid">
-    <!-- Fast Movers -->
-    <div class="stock-card-inner">
-        <div class="card-header">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
-            <h3>Fast Movers – Top 5</h3>
-        </div>
-        <div class="table-responsive">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Item</th>
-                        <th>Units Sold</th>
-                        <th>Total Sales (₹)</th>
-                        <th>Details</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in top_items|slice:":5" %}
-                    <tr>
-                        <td>
-                            {% if item.id %}
-                                <a href="{% url 'product_detail' schema_name=tenant.schema_name product_id=item.id %}" style="color: var(--primary); text-decoration: none; font-weight: 600;">{{ item.name }}</a>
-                            {% else %}
-                                {{ item.name }}
-                            {% endif %}
-                        </td>
-                        <td>{{ item.units }}</td>
-                        <td>₹{{ item.value|floatformat:2 }}</td>
-                        <td>
-                            {% if item.id %}
-                                <a href="{% url 'product_detail' schema_name=tenant.schema_name product_id=item.id %}" class="eye-btn" title="View Details">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                                        <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                                    </svg>
-                                </a>
-                            {% else %}
-                                —
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr><td colspan="4" class="empty-row">No sales data yet.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- Recent Sales -->
-    <div class="stock-card-inner">
-        <div class="card-header">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            <h3>Recent Item Sales</h3>
-        </div>
-        <div class="table-responsive">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Student</th>
-                        <th>Item</th>
-                        <th>Qty</th>
-                        <th>Amount</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for entry in recent_sales %}
-                    <tr>
-                        <td>{{ entry.payment.payment_date|date:"d M Y" }}</td>
-                        <td><a href="{% url 'student_profile' schema_name=tenant.schema_name student_id=entry.student.id %}#payment-history" style="color: var(--primary); text-decoration: none; font-weight: 600;">{{ entry.student.name }}</a></td>
-                        <td>{{ entry.item.name }}</td>
-                        <td>{{ entry.item.quantity }}</td>
-                        <td>₹{{ entry.item.line_total|floatformat:2 }}</td>
-                    </tr>
-                    {% empty %}
-                    <tr><td colspan="5" class="empty-row">No recent sales.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
-
-<!-- ==================== MODALS ==================== -->
-
-<!-- Categories Modal -->
-<div id="categoriesModal" class="modal-overlay">
-    <div class="modal-container">
-        <div class="modal-header">
-            <h3>Manage Categories</h3>
-            <button class="close-modal" onclick="closeCategoriesModal()">&times;</button>
-        </div>
-        <div style="margin-bottom: 1rem;">
-            <button class="btn-sm" onclick="openCategoryModal()">+ Add Category</button>
-        </div>
-        <div class="table-responsive">
-            <table class="data-table">
-                <thead>
-                    <tr><th>Name</th><th>Description</th><th>Actions</th></tr>
-                </thead>
-                <tbody>
-                    {% for cat in raw_cats %}
-                    <tr>
-                        <td><strong>{{ cat.1 }}</strong></td>
-                        <td>{{ cat.2|default:"—" }}</td>
-                        <td class="action-btns">
-                            <button class="action-icon" onclick="editCategory({{ cat.0 }}, '{{ cat.1|escapejs }}', '{{ cat.2|default:""|escapejs }}')" title="Edit">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4Z"/></svg>
-                            </button>
-                            <button class="action-icon" onclick="deleteCategory({{ cat.0 }}, '{{ cat.1|escapejs }}')" title="Delete">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                            </button>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr><td colspan="3" class="empty-row">No categories yet.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
-
-<!-- Category Form Modal -->
-<div id="categoryFormModal" class="modal-overlay">
-    <div class="modal-container">
-        <div class="modal-header">
-            <h3 id="catModalTitle">Add Category</h3>
-            <button class="close-modal" onclick="closeCategoryFormModal()">&times;</button>
-        </div>
-        <form method="post" action="{% url 'add_category' schema_name=tenant.schema_name %}" id="categoryForm">
-            {% csrf_token %}
-            <input type="hidden" name="category_id" id="catId">
-            <div class="form-field">
-                <label>Name</label>
-                <input type="text" name="name" id="catName" required>
-            </div>
-            <div class="form-field">
-                <label>Description</label>
-                <textarea name="description" id="catDesc" rows="2"></textarea>
-            </div>
-            <div class="modal-actions">
-                <button type="button" class="btn-secondary" onclick="closeCategoryFormModal()">Cancel</button>
-                <button type="submit" class="btn-primary" id="catSubmitBtn">Save Category</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- Product Form Modal -->
-<div id="productModal" class="modal-overlay">
-    <div class="modal-container">
-        <div class="modal-header">
-            <h3 id="prodModalTitle">Add Product</h3>
-            <button class="close-modal" onclick="closeProductModal()">&times;</button>
-        </div>
-        <form method="post" action="{% url 'add_product' schema_name=tenant.schema_name %}" id="productForm">
-            {% csrf_token %}
-            <input type="hidden" name="product_id" id="prodId">
-            <div class="form-field">
-                <label>Category</label>
-                <select name="category" id="prodCategory" required>
-                    {% for cat in raw_cats %}
-                    <option value="{{ cat.0 }}">{{ cat.1 }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="form-field">
-                <label>Product Name</label>
-                <input type="text" name="name" id="prodName" required>
-            </div>
-            <div class="form-field">
-                <label>Selling Price (₹)</label>
-                <input type="number" step="0.01" name="selling_price" id="prodPrice" required>
-            </div>
-            <div class="form-field">
-                <label>Quantity</label>
-                <input type="number" name="quantity" id="prodQty" required>
-            </div>
-            <div class="form-field">
-                <label>Notes</label>
-                <textarea name="notes" id="prodNotes" rows="2"></textarea>
-            </div>
-            <div class="modal-actions">
-                <button type="button" class="btn-secondary" onclick="closeProductModal()">Cancel</button>
-                <button type="submit" class="btn-primary" id="prodSubmitBtn">Save Product</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<script>
-    // ---------- Product table pagination, filtering, sorting ----------
-    let allProducts = [];
-    const rowsPerPage = 15;
-    let currentPage = 1;
-    let currentSort = { column: null, direction: 'asc' };
-    let currentFilters = {
-        search: '',
-        category: '',
-        minPrice: '',
-        maxPrice: '',
-        minStock: '',
-        maxStock: ''
-    };
-
-    // Collect all product rows data
-    const tbody = document.getElementById('productsTbody');
-    if (tbody) {
-        const rows = Array.from(tbody.querySelectorAll('tr')).filter(r => !r.classList.contains('empty-row'));
-        allProducts = rows.map(row => ({
-            element: row,
-            sku: row.getAttribute('data-sku') || '',
-            name: row.getAttribute('data-name') || '',
-            category: row.getAttribute('data-category') || '',
-            price: parseFloat(row.getAttribute('data-price')) || 0,
-            qty: parseInt(row.getAttribute('data-qty')) || 0,
-            id: row.getAttribute('data-id')
-        }));
-    }
-
-    function filterProducts() {
-        return allProducts.filter(p => {
-            const searchTerm = currentFilters.search.toLowerCase();
-            if (searchTerm && !p.sku.includes(searchTerm) && !p.name.includes(searchTerm)) return false;
-
-            if (currentFilters.category && p.category !== currentFilters.category) return false;
-
-            const minPrice = parseFloat(currentFilters.minPrice);
-            if (!isNaN(minPrice) && p.price < minPrice) return false;
-            const maxPrice = parseFloat(currentFilters.maxPrice);
-            if (!isNaN(maxPrice) && p.price > maxPrice) return false;
-
-            const minStock = parseInt(currentFilters.minStock);
-            if (!isNaN(minStock) && p.qty < minStock) return false;
-            const maxStock = parseInt(currentFilters.maxStock);
-            if (!isNaN(maxStock) && p.qty > maxStock) return false;
-
-            return true;
-        });
-    }
-
-    function sortProducts(products) {
-        if (!currentSort.column) return products;
-        return [...products].sort((a, b) => {
-            let aVal, bVal;
-            if (currentSort.column === 'sku') { aVal = a.sku; bVal = b.sku; }
-            else if (currentSort.column === 'name') { aVal = a.name; bVal = b.name; }
-            else if (currentSort.column === 'category') { aVal = a.category; bVal = b.category; }
-            else if (currentSort.column === 'price') { aVal = a.price; bVal = b.price; }
-            else if (currentSort.column === 'qty') { aVal = a.qty; bVal = b.qty; }
-            if (aVal < bVal) return currentSort.direction === 'asc' ? -1 : 1;
-            if (aVal > bVal) return currentSort.direction === 'asc' ? 1 : -1;
-            return 0;
-        });
-    }
-
-    function renderTable() {
-        let filtered = filterProducts();
-        filtered = sortProducts(filtered);
-        const totalPages = Math.ceil(filtered.length / rowsPerPage);
-        if (currentPage > totalPages) currentPage = Math.max(1, totalPages);
-        const start = (currentPage - 1) * rowsPerPage;
-        const pageRows = filtered.slice(start, start + rowsPerPage);
-
-        tbody.innerHTML = '';
-        if (pageRows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="empty-row">No products match the filters.</td></tr>';
-        } else {
-            for (let p of pageRows) {
-                tbody.appendChild(p.element.cloneNode(true));
-            }
-        }
-
-        // Update pagination info
-        const infoDiv = document.getElementById('paginationInfo');
-        const linksDiv = document.getElementById('paginationLinks');
-        if (totalPages <= 1) {
-            infoDiv.innerHTML = '';
-            linksDiv.innerHTML = '';
-            return;
-        }
-        infoDiv.innerHTML = `Showing <strong>${filtered.length}</strong> of <strong>${allProducts.length}</strong> products`;
-        let linksHtml = '';
-        if (currentPage > 1) {
-            linksHtml += `<span class="page-link" data-page="${currentPage-1}">‹</span>`;
-        }
-        for (let i = 1; i <= totalPages; i++) {
-            linksHtml += `<span class="page-link ${i === currentPage ? 'active' : ''}" data-page="${i}">${i}</span>`;
-        }
-        if (currentPage < totalPages) {
-            linksHtml += `<span class="page-link" data-page="${currentPage+1}">›</span>`;
-        }
-        linksDiv.innerHTML = linksHtml;
-        document.querySelectorAll('.page-link[data-page]').forEach(link => {
-            link.addEventListener('click', (e) => {
-                currentPage = parseInt(link.dataset.page);
-                renderTable();
-            });
-        });
-    }
-
-    function applyFilters() {
-        currentFilters.search = document.getElementById('searchInput').value.trim();
-        currentFilters.category = document.getElementById('categoryFilter').value;
-        currentFilters.minPrice = document.getElementById('minPrice').value;
-        currentFilters.maxPrice = document.getElementById('maxPrice').value;
-        currentFilters.minStock = document.getElementById('minStock').value;
-        currentFilters.maxStock = document.getElementById('maxStock').value;
-        currentPage = 1;
-        renderTable();
-    }
-
-    function resetFilters() {
-        document.getElementById('searchInput').value = '';
-        document.getElementById('categoryFilter').value = '';
-        document.getElementById('minPrice').value = '';
-        document.getElementById('maxPrice').value = '';
-        document.getElementById('minStock').value = '';
-        document.getElementById('maxStock').value = '';
-        currentFilters = { search: '', category: '', minPrice: '', maxPrice: '', minStock: '', maxStock: '' };
-        currentPage = 1;
-        renderTable();
-    }
-
-    document.getElementById('applyFiltersBtn')?.addEventListener('click', applyFilters);
-    document.getElementById('resetFiltersBtn')?.addEventListener('click', resetFilters);
-    document.getElementById('searchInput')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') applyFilters(); });
-
-    // Sorting
-    document.querySelectorAll('#productsTable th[data-sort]').forEach(th => {
-        th.addEventListener('click', () => {
-            const column = th.dataset.sort;
-            if (currentSort.column === column) {
-                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
-            } else {
-                currentSort.column = column;
-                currentSort.direction = 'asc';
-            }
-            // Update sort icons
-            document.querySelectorAll('#productsTable th .sort-icon').forEach(icon => icon.innerHTML = '');
-            const iconSpan = th.querySelector('.sort-icon');
-            if (iconSpan) iconSpan.innerHTML = currentSort.direction === 'asc' ? '↑' : '↓';
-            renderTable();
-        });
-    });
-
-    // Initial render
-    if (allProducts.length) renderTable();
-
-    // ---------- KPI click filtering ----------
-    document.querySelectorAll('.kpi-card').forEach(card => {
-        card.addEventListener('click', function() {
-            const filter = this.dataset.filter;
-            const searchInput = document.getElementById('searchInput');
-            const categoryFilter = document.getElementById('categoryFilter');
-            const minPrice = document.getElementById('minPrice');
-            const maxPrice = document.getElementById('maxPrice');
-            const minStock = document.getElementById('minStock');
-            const maxStock = document.getElementById('maxStock');
-            // Reset filters
-            if (filter === 'all') {
-                resetFilters();
-            } else if (filter === 'low_stock') {
-                minStock.value = '0';
-                maxStock.value = '9';
-                applyFilters();
-            } else if (filter === 'categories') {
-                // Just reset others
-                searchInput.value = '';
-                minPrice.value = '';
-                maxPrice.value = '';
-                minStock.value = '';
-                maxStock.value = '';
-                applyFilters();
-            } else if (filter === 'stock_value' || filter === 'units_sold' || filter === 'sales_value') {
-                // Informational; just reset others
-                searchInput.value = '';
-                categoryFilter.value = '';
-                minPrice.value = '';
-                maxPrice.value = '';
-                minStock.value = '';
-                maxStock.value = '';
-                applyFilters();
-            } else {
-                // Any other filter: just apply
-                applyFilters();
-            }
-        });
-    });
-
-    // ---------- Modals ----------
-    function openCategoriesModal() {
-        document.getElementById('categoriesModal').classList.add('active');
-    }
-    function closeCategoriesModal() {
-        document.getElementById('categoriesModal').classList.remove('active');
-    }
-    document.getElementById('categoriesModal')?.addEventListener('click', function(e) {
-        if (e.target === this) closeCategoriesModal();
-    });
-
-    function openCategoryModal(editId, editName, editDesc) {
-        const modal = document.getElementById('categoryFormModal');
-        const title = document.getElementById('catModalTitle');
-        const idField = document.getElementById('catId');
-        const nameField = document.getElementById('catName');
-        const descField = document.getElementById('catDesc');
-        const submitBtn = document.getElementById('catSubmitBtn');
-        if (editId) {
-            title.innerText = 'Edit Category';
-            idField.value = editId;
-            nameField.value = editName;
-            descField.value = editDesc;
-            submitBtn.innerText = 'Update Category';
-        } else {
-            title.innerText = 'Add Category';
-            idField.value = '';
-            nameField.value = '';
-            descField.value = '';
-            submitBtn.innerText = 'Save Category';
-        }
-        modal.classList.add('active');
-        closeCategoriesModal();
-    }
-    function closeCategoryFormModal() {
-        document.getElementById('categoryFormModal').classList.remove('active');
-    }
-    document.getElementById('categoryFormModal')?.addEventListener('click', function(e) {
-        if (e.target === this) closeCategoryFormModal();
-    });
-
-    function editCategory(id, name, desc) {
-        openCategoryModal(id, name, desc);
-    }
-    function deleteCategory(id, name) {
-        if (confirm(`Delete category "${name}"? All products in this category will remain but become orphaned.`)) {
-            const form = document.createElement('form');
-            form.method = 'post';
-            form.action = "{% url 'delete_category' schema_name=tenant.schema_name category_id=0 %}".replace('0', id);
-            form.innerHTML = `{% csrf_token %}`;
-            document.body.appendChild(form);
-            form.submit();
-        }
-    }
-
-    function openProductModal(editId, editName, editCatId, editPrice, editQty, editNotes) {
-        const modal = document.getElementById('productModal');
-        const title = document.getElementById('prodModalTitle');
-        const idField = document.getElementById('prodId');
-        const nameField = document.getElementById('prodName');
-        const catSelect = document.getElementById('prodCategory');
-        const priceField = document.getElementById('prodPrice');
-        const qtyField = document.getElementById('prodQty');
-        const notesField = document.getElementById('prodNotes');
-        const submitBtn = document.getElementById('prodSubmitBtn');
-        if (editId) {
-            title.innerText = 'Edit Product';
-            idField.value = editId;
-            nameField.value = editName;
-            if (editCatId) catSelect.value = editCatId;
-            priceField.value = editPrice;
-            qtyField.value = editQty;
-            notesField.value = editNotes;
-            submitBtn.innerText = 'Update Product';
-        } else {
-            title.innerText = 'Add Product';
-            idField.value = '';
-            nameField.value = '';
-            catSelect.value = '';
-            priceField.value = '';
-            qtyField.value = '';
-            notesField.value = '';
-            submitBtn.innerText = 'Save Product';
-        }
-        modal.classList.add('active');
-    }
-    function closeProductModal() {
-        document.getElementById('productModal').classList.remove('active');
-    }
-    document.getElementById('productModal')?.addEventListener('click', function(e) {
-        if (e.target === this) closeProductModal();
-    });
-
-    function editProduct(id, name, catId, price, qty, notes) {
-        openProductModal(id, name, catId, price, qty, notes);
-    }
-    function deleteProduct(id, name) {
-        if (confirm(`Delete product "${name}"?`)) {
-            const form = document.createElement('form');
-            form.method = 'post';
-            form.action = "{% url 'delete_product' schema_name=tenant.schema_name product_id=0 %}".replace('0', id);
-            form.innerHTML = `{% csrf_token %}`;
-            document.body.appendChild(form);
-            form.submit();
-        }
-    }
-</script>
-{% endblock %}"""
-
-    with open(TEMPLATE_FILE, "w", encoding="utf-8") as f:
-        f.write(new_template)
-
-    print("✅ stock_management.html completely redesigned")
-    return True
-
-
-def main():
-    print("\n" + "=" * 60)
-    print("  STOCK MANAGEMENT REDESIGN PATCHER")
-    print("=" * 60 + "\n")
-
-    if patch_template():
-        print("\n" + "=" * 60)
-        print("✅ PATCH COMPLETE – Stock Management page redesigned!")
-        print("\n   New features:")
-        print("   • Clean, modern KPI cards (clickable to filter)")
-        print("   • No duplicate KPIs")
-        print("   • Search, category, price, and stock filters")
-        print("   • Pagination (15 per page)")
-        print("   • Fast Movers and Recent Sales sections")
-        print("   • All modals (categories, products) with proper styling")
-        print("   • Fully responsive and uses only SVG icons")
-        print("\n   Restart server: python manage.py runserver")
-        print("=" * 60 + "\n")
-    else:
-        print("❌ PATCH FAILED")
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
+print("\n🎉 All changes applied successfully!")
+print("Restart your server: python manage.py runserver")

@@ -1,4 +1,5 @@
 {% extends 'tenant/base.html' %}
+{% load fee_extras %}
 {% load static %}
 {% block title %}Stock Management | {{ tenant.name }}{% endblock %}
 
@@ -593,7 +594,7 @@
         <div class="kpi-icon blue"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M20 7h-4.18A3 3 0 0016 5.18V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v1.18A3 3 0 008.18 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M12 12v4m-2-2h4"/></svg></div>
         <div class="kpi-info">
             <div class="kpi-label">Total Products</div>
-            <div class="kpi-value">{{ analytics.total_products }}</div>
+            <div class="kpi-value">{{ analytics.total_products|humanize_number }}</div>
             <div class="kpi-sub">All items</div>
         </div>
     </div>
@@ -601,7 +602,7 @@
         <div class="kpi-icon purple"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg></div>
         <div class="kpi-info">
             <div class="kpi-label">Categories</div>
-            <div class="kpi-value">{{ analytics.total_categories }}</div>
+            <div class="kpi-value">{{ analytics.total_categories|humanize_number }}</div>
             <div class="kpi-sub">Product groups</div>
         </div>
     </div>
@@ -609,7 +610,7 @@
         <div class="kpi-icon green"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></div>
         <div class="kpi-info">
             <div class="kpi-label">Stock Value</div>
-            <div class="kpi-value">₹{{ analytics.total_stock_value|floatformat:2 }}</div>
+            <div class="kpi-value">₹{{ analytics.total_stock_value|humanize_number }}</div>
             <div class="kpi-sub">Total inventory worth</div>
         </div>
     </div>
@@ -617,7 +618,7 @@
         <div class="kpi-icon red"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
         <div class="kpi-info">
             <div class="kpi-label">Low Stock</div>
-            <div class="kpi-value">{{ analytics.low_stock_count }}</div>
+            <div class="kpi-value">{{ analytics.low_stock_count|humanize_number }}</div>
             <div class="kpi-sub">Items < 10</div>
         </div>
     </div>
@@ -625,7 +626,7 @@
         <div class="kpi-icon orange"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M3 12h3l3-9 3 18 3-9h3"/></svg></div>
         <div class="kpi-info">
             <div class="kpi-label">Units Sold</div>
-            <div class="kpi-value">{{ analytics.total_units_sold }}</div>
+            <div class="kpi-value">{{ analytics.total_units_sold|humanize_number }}</div>
             <div class="kpi-sub">All time</div>
         </div>
     </div>
@@ -633,7 +634,7 @@
         <div class="kpi-icon teal"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg></div>
         <div class="kpi-info">
             <div class="kpi-label">Sales Value</div>
-            <div class="kpi-value">₹{{ analytics.total_sales_value|floatformat:2 }}</div>
+            <div class="kpi-value">₹{{ analytics.total_sales_value|humanize_number }}</div>
             <div class="kpi-sub">Total revenue</div>
         </div>
     </div>
