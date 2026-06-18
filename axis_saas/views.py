@@ -105,7 +105,8 @@ def dashboard(request, schema_name):
         for student in Student.objects.all():
             pending = get_overall_pending(student)
             if pending > 0:
-                top_defaulters.append({'student': student, 'pending': pending})
+                fee_pending = sum(fr.remaining for fr in student.fee_records.filter(status__in=['pending','partial','overdue']))
+                top_defaulters.append({'student': student, 'pending': pending, 'fee_pending': fee_pending})
         top_defaulters = sorted(top_defaulters, key=lambda x: x['pending'], reverse=True)[:5]
         
         # Monthly trend (last 6 months)
