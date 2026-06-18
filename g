@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AXIS PWA Patcher – Fixes installability and adds a floating install button.
+AXIS PWA Patcher – Fixes installability on both mobile and desktop.
 Run this script once from the project root (where manage.py is).
 """
 
@@ -197,8 +197,8 @@ print("\nNext steps:")
 print("1. Run `python manage.py collectstatic --noinput` to copy the new icons to STATIC_ROOT.")
 print("2. Restart your Django server.")
 print("3. Visit your tenant portal (e.g., /portal/your-school/).")
-print("4. The floating install button (bottom-right) should appear.")
-print("5. Click it to add the app to your home screen.")
+print("4. The floating install button (bottom-right) should appear on both mobile and desktop.")
+print("5. Click it to add the app to your home screen (on desktop it will install as a standalone window).")
 print("\nIf the button doesn't appear, ensure:")
 print("   - Your browser supports PWA (Chrome, Edge, Samsung Internet, etc.)")
 print("   - You are using HTTPS or localhost.")
