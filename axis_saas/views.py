@@ -290,34 +290,108 @@ def fee_receipt(request, schema_name, receipt_id):
         }
     return render(request, 'tenant/receipt.html', context)
 def defaulters(request, schema_name):
+    """Defaulters list with search, filters, pagination, and analytics KPIs."""
     tenant = get_tenant(request, schema_name)
+    
+    # Get query parameters
+    q = request.GET.get('q', '').strip()
+    grade = request.GET.get('grade', '')
+    section = request.GET.get('section', '')
     days = request.GET.get('days', '0')
+    sort_by = request.GET.get('sort_by', 'overdue')  # overdue, pending, name
+    page_number = request.GET.get('page', 1)
+    
     try:
         days = int(days)
     except:
         days = 0
-    if days < 0: days = 0
+    if days < 0:
+        days = 0
+
     with schema_context(schema_name):
         today = timezone.localdate()
         cutoff = today - timedelta(days=days) if days > 0 else None
-        base_qs = Student.objects.filter(fee_records__status__in=['pending', 'partial', 'overdue']).distinct()
+        
+        # Base queryset: students with pending/partial/overdue fees
+        base_qs = Student.objects.filter(
+            fee_records__status__in=['pending', 'partial', 'overdue']
+        ).distinct()
+        
+        # Apply overdue days filter
         if cutoff:
             base_qs = base_qs.filter(fee_records__due_date__lte=cutoff)
+        
+        # Apply search
+        if q:
+            base_qs = base_qs.filter(
+                Q(name__icontains=q) |
+                Q(roll_number__icontains=q) |
+                Q(father_name__icontains=q) |
+                Q(father_cnic__icontains=q) |
+                Q(parent_mobile__icontains=q)
+            )
+        
+        # Apply grade filter
+        if grade:
+            base_qs = base_qs.filter(grade=grade)
+        
+        # Apply section filter
+        if section:
+            base_qs = base_qs.filter(section=section)
+        
+        # Build result list with computed fields
         result = []
         for student in base_qs:
-            pending_fee = get_overall_pending(student)
+            fee_pending = sum(fr.remaining for fr in student.fee_records.filter(status__in=['pending','partial','overdue']))
+            total_pending = get_overall_pending(student)
             oldest_due = student.fee_records.filter(status__in=['pending', 'partial', 'overdue']).order_by('due_date').first()
             days_overdue = (today - oldest_due.due_date).days if oldest_due and oldest_due.due_date < today else 0
-            result.append({'student': student, 'pending_amount': pending_fee, 'days_overdue': days_overdue})
-        result.sort(key=lambda x: x['days_overdue'], reverse=True)
-        total_pending_all = sum(fr.remaining for fr in FeeRecord.objects.filter(status__in=['pending', 'partial', 'overdue']))
+            result.append({
+                'student': student,
+                'pending_amount': total_pending,
+                'fee_pending': fee_pending,
+                'days_overdue': days_overdue
+            })
+        
+        # Sorting
+        if sort_by == 'pending':
+            result.sort(key=lambda x: x['pending_amount'], reverse=True)
+        elif sort_by == 'name':
+            result.sort(key=lambda x: x['student'].name.lower())
+        else:  # overdue (default)
+            result.sort(key=lambda x: x['days_overdue'], reverse=True)
+        
+        # --- Analytics KPIs ---
+        total_defaulters = len(result)
+        total_pending_all = sum(r['pending_amount'] for r in result)
+        avg_overdue = sum(r['days_overdue'] for r in result) / total_defaulters if total_defaulters > 0 else 0
+        max_overdue = max((r['days_overdue'] for r in result), default=0)
+        
+        # --- Pagination (15 per page) ---
+        paginator = Paginator(result, 15)
+        page_obj = paginator.get_page(page_number)
+        
+        # --- Distinct grades & sections for filter dropdowns ---
+        grades = list(Student.objects.values_list('grade', flat=True).distinct().order_by('grade'))
+        sections = list(Student.objects.values_list('section', flat=True).distinct().order_by('section'))
+    
     context = {
-        'tenant': tenant, 'defaulters': result, 'days': days, 'total_pending_all': total_pending_all,
+        'tenant': tenant,
+        'defaulters': page_obj,                    # paginated list
+        'total_defaulters': total_defaulters,
+        'total_pending_all': total_pending_all,
+        'avg_overdue': round(avg_overdue, 1),
+        'max_overdue': max_overdue,
+        'days': days,
+        'search_query': q,
+        'grade_filter': grade,
+        'section_filter': section,
+        'sort_by': sort_by,
+        'grades': grades,
+        'sections': sections,
         'logo_url': tenant.school_logo.url if tenant.school_logo else None,
     }
     return render(request, 'tenant/defaulters.html', context)
-
-# ------------------- Reports -------------------
 @require_tenant_type(['school'])
 def reports(request, schema_name):
     tenant = get_tenant(request, schema_name)
