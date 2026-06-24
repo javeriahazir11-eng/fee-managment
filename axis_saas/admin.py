@@ -3,7 +3,7 @@ from django_tenants.admin import TenantAdminMixin
 from django import forms
 from django.utils.safestring import mark_safe
 from django.core.exceptions import ValidationError
-from .models import SchoolClient
+from .models import SchoolClient, SCHOOL_FEATURE_CHOICES
 
 
 class TenantOnlyAdminMixin:
@@ -66,12 +66,34 @@ class PublicOnlyAdminMixin:
 
 
 class SchoolClientForm(forms.ModelForm):
+    enabled_features = forms.MultipleChoiceField(
+        choices=SCHOOL_FEATURE_CHOICES,
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+        help_text="Enable school-specific modules for this tenant. Only selected modules will appear in the school portal."
+    )
+
     class Meta:
         model = SchoolClient
-        fields = ['name', 'schema_name', 'admin_username', 'admin_password', 'is_active', 'tenant_type']
+        fields = ['name', 'schema_name', 'admin_username', 'admin_password', 'is_active', 'tenant_type', 'enabled_features']
         widgets = {
             'admin_password': forms.PasswordInput(render_value=True),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields['enabled_features'].initial = self.instance.enabled_features or [choice[0] for choice in SCHOOL_FEATURE_CHOICES]
+
+    def clean(self):
+        cleaned_data = super().clean()
+        tenant_type = cleaned_data.get('tenant_type') or getattr(self.instance, 'tenant_type', None)
+        enabled_features = cleaned_data.get('enabled_features')
+        if tenant_type != 'school':
+            cleaned_data['enabled_features'] = []
+        elif not enabled_features:
+            cleaned_data['enabled_features'] = [choice[0] for choice in SCHOOL_FEATURE_CHOICES]
+        return cleaned_data
 
     def clean_schema_name(self):
         schema = self.cleaned_data.get('schema_name').lower().strip()
@@ -101,8 +123,12 @@ class SchoolClientAdmin(TenantAdminMixin, admin.ModelAdmin):
         ('Dynamic Sub-Tenant Authority Provisioning', {
             'fields': ('admin_username', 'admin_password'),
         }),
-                ('Tenant Type', {
+        ('Tenant Type', {
             'fields': ('tenant_type',),
+        }),
+        ('School Feature Authority', {
+            'fields': ('enabled_features',),
+            'description': 'Select the school modules that should be visible and enabled for this tenant admin portal. Only enabled school features will be rendered to the tenant.',
         }),
         ('Generated Access Routes', {
             'fields': ('school_admin_portal_url',),

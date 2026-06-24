@@ -4,6 +4,18 @@ from django_tenants.models import TenantMixin, DomainMixin
 from decimal import Decimal
 from datetime import date, timedelta
 
+SCHOOL_FEATURE_CHOICES = [
+    ('dashboard', 'Dashboard'),
+    ('students', 'Students'),
+    ('fee_collection', 'Fee Collection'),
+    ('defaulters', 'Defaulters'),
+    ('reports', 'Reports'),
+    ('stock_management', 'Stock Management'),
+    ('fee_structure', 'Fee Structure'),
+    ('fee_settings', 'Fee Settings'),
+    ('family_payment', 'Family Payment'),
+]
+
 # ------------------- Tenant Model -------------------
 class SchoolClient(TenantMixin):
     name = models.CharField(max_length=100, unique=True)
@@ -14,14 +26,27 @@ class SchoolClient(TenantMixin):
     admin_password = models.CharField(max_length=128, default="AxisFallback123!")
     school_logo = models.FileField(upload_to="school_logos/", blank=True, null=True)
     tenant_type = models.CharField(max_length=20, choices=[("school", "School"), ("gym", "Gym")], default="school")
+    enabled_features = models.JSONField(default=list, blank=True, help_text="Select the school modules enabled for this tenant.")
     
     auto_create_schema = True
 
     def __str__(self):
         return f"{self.name}"
 
+    def get_available_school_features(self):
+        return [choice[0] for choice in SCHOOL_FEATURE_CHOICES]
+
+    def is_feature_enabled(self, feature_key):
+        if self.tenant_type != 'school':
+            return False
+        if not self.enabled_features:
+            return False
+        return feature_key in self.enabled_features
+
     def save(self, *args, **kwargs):
         is_new = self.pk is None
+        if self.tenant_type == 'school' and not self.enabled_features:
+            self.enabled_features = [choice[0] for choice in SCHOOL_FEATURE_CHOICES]
         super().save(*args, **kwargs)
         if is_new and self.schema_name != 'public':
             SchoolDomain.objects.get_or_create(

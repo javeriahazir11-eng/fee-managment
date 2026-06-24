@@ -32,6 +32,20 @@ def require_tenant_type(allowed_types):
     return decorator
 
 
+def require_school_feature(feature_key):
+    def decorator(view_func):
+        def wrapper(request, schema_name, *args, **kwargs):
+            if hasattr(request, 'tenant') and request.tenant is not None:
+                tenant = request.tenant
+            else:
+                tenant = get_tenant(request, schema_name)
+            if tenant.tenant_type != 'school' or not tenant.is_feature_enabled(feature_key):
+                raise Http404("This school feature is not enabled for this tenant.")
+            return view_func(request, schema_name, *args, **kwargs)
+        return wrapper
+    return decorator
+
+
 from .models import SchoolClient, Student, FeeStructure, FeeRecord, PaymentTransaction, SchoolFeeSettings, Product, ProductCategory
 from .forms import StudentForm, FeeCollectionForm, FeeSettingsForm, FeeStructureForm, FamilyPaymentForm
 
@@ -66,6 +80,7 @@ def get_tenant(request, schema_name):
 
 # ------------------- Dashboard -------------------
 @require_tenant_type(['school'])
+@require_school_feature('dashboard')
 def dashboard(request, schema_name):
     """Enhanced school dashboard with comprehensive KPIs and quick actions."""
     tenant = get_tenant(request, schema_name)
@@ -142,6 +157,8 @@ def dashboard(request, schema_name):
         'start_date': first_day_month,
     }
     return render(request, 'tenant/dashboard.html', context)
+@require_tenant_type(['school'])
+@require_school_feature('students')
 def student_list(request, schema_name):
     tenant = get_tenant(request, schema_name)
     query = request.GET.get('q', '')
@@ -184,6 +201,7 @@ def student_list(request, schema_name):
     }
     return render(request, 'tenant/student_list.html', context)
 @require_tenant_type(['school'])
+@require_school_feature('students')
 def student_profile(request, schema_name, student_id):
     tenant = get_tenant(request, schema_name)
     page = request.GET.get('page', 1)
@@ -324,6 +342,8 @@ def fee_receipt(request, schema_name, receipt_id):
         }
     return render(request, 'tenant/receipt.html', context)
 
+@require_tenant_type(['school'])
+@require_school_feature('defaulters')
 def defaulters(request, schema_name):
     """Defaulters list with search, filters, pagination, and analytics KPIs.
        Now includes students with overall pending (fee + items) even if no pending fee record.
@@ -428,6 +448,9 @@ def defaulters(request, schema_name):
         'logo_url': tenant.school_logo.url if tenant.school_logo else None,
     }
     return render(request, 'tenant/defaulters.html', context)
+
+@require_tenant_type(['school'])
+@require_school_feature('reports')
 def reports(request, schema_name):
     tenant = get_tenant(request, schema_name)
     report_type = request.GET.get('type', 'collection')
@@ -568,6 +591,7 @@ def reports(request, schema_name):
     return render(request, 'tenant/reports.html', context)
 
 @require_tenant_type(['school'])
+@require_school_feature('fee_collection')
 def fee_collection(request, schema_name, student_id=None):
     tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
@@ -809,6 +833,7 @@ def settings(request, schema_name):
 
 # ------------------- Fee Structure -------------------
 @require_tenant_type(['school'])
+@require_school_feature('fee_structure')
 def fee_structure(request, schema_name):
     tenant = get_tenant(request, schema_name)
     edit_grade = request.GET.get('edit', '')
@@ -852,6 +877,7 @@ def fee_structure(request, schema_name):
     return render(request, 'tenant/fee_structure.html', context)
 # ------------------- Fee Settings -------------------
 @require_tenant_type(['school'])
+@require_school_feature('fee_settings')
 def fee_settings(request, schema_name):
     tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
@@ -869,6 +895,7 @@ def fee_settings(request, schema_name):
 
 # ------------------- Family Payment -------------------
 @require_tenant_type(['school'])
+@require_school_feature('family_payment')
 def family_payment(request, schema_name):
     tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
@@ -926,6 +953,7 @@ def family_payment(request, schema_name):
 
 # ------------------- API: Student Search -------------------
 @require_tenant_type(['school'])
+@require_school_feature('students')
 def student_search_api(request, schema_name):
     q = request.GET.get("q", "")
     with schema_context(schema_name):
@@ -938,6 +966,7 @@ def student_search_api(request, schema_name):
 
 # ------------------- Add Student -------------------
 @require_tenant_type(['school'])
+@require_school_feature('students')
 def add_student(request, schema_name):
     tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
@@ -964,6 +993,7 @@ def add_student(request, schema_name):
 
 # ------------------- Edit Student -------------------
 @require_tenant_type(['school'])
+@require_school_feature('students')
 def edit_student(request, schema_name, student_id):
     tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
@@ -2412,6 +2442,7 @@ def stock_management(request, schema_name):
     return render(request, 'tenant/stock_management.html', context)
 
 @require_tenant_type(['school'])
+@require_school_feature('stock_management')
 def product_detail(request, schema_name, product_id):
     """Detailed product analytics page with sales history and recent receipts."""
     tenant = get_tenant(request, schema_name)
@@ -2458,6 +2489,7 @@ def product_detail(request, schema_name, product_id):
 
 
 @require_tenant_type(['school'])
+@require_school_feature('stock_management')
 def add_category(request, schema_name):
     """Add or edit a product category."""
     from django.shortcuts import redirect, get_object_or_404
@@ -2488,6 +2520,7 @@ def add_category(request, schema_name):
                     messages.success(request, f"Category '{name}' added.")
     return redirect('stock_management', schema_name=schema_name)
 @require_tenant_type(['school'])
+@require_school_feature('stock_management')
 def delete_category(request, schema_name, category_id):
     """Delete a category (only if no products linked)."""
     from django.shortcuts import get_object_or_404, redirect
@@ -2506,6 +2539,7 @@ def delete_category(request, schema_name, category_id):
 
 
 @require_tenant_type(['school'])
+@require_school_feature('stock_management')
 def add_product(request, schema_name):
     """Add or edit a product."""
     from django.shortcuts import redirect, get_object_or_404
@@ -2557,6 +2591,7 @@ def add_product(request, schema_name):
 
 
 @require_tenant_type(['school'])
+@require_school_feature('stock_management')
 def delete_product(request, schema_name, product_id):
     """Delete a product."""
     from django.shortcuts import get_object_or_404, redirect

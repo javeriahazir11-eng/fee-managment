@@ -56,6 +56,26 @@ def portal_wrapper(view_func):
         return view_func(request, schema_name, *args, **kwargs)
     return wrapper
 
+def get_school_default_route(tenant):
+    mapping = [
+        ('dashboard', 'dashboard'),
+        ('students', 'student_list'),
+        ('fee_collection', 'fee_collection'),
+        ('defaulters', 'defaulters'),
+        ('reports', 'reports'),
+        ('stock_management', 'stock_management'),
+        ('fee_structure', 'fee_structure'),
+        ('fee_settings', 'fee_settings'),
+        ('family_payment', 'family_payment'),
+    ]
+    if tenant.tenant_type != 'school':
+        return 'dashboard'
+    for feature, route_name in mapping:
+        if tenant.is_feature_enabled(feature):
+            return route_name
+    return 'settings'
+
+
 def school_login(request, schema_name):
     # Ensure tenant exists
     tenant = ensure_schoolclient(schema_name)
@@ -74,7 +94,7 @@ def school_login(request, schema_name):
             if tenant.tenant_type == 'gym':
                 return redirect('gym_dashboard', schema_name=tenant.schema_name)
             else:
-                return redirect('dashboard', schema_name=tenant.schema_name)
+                return redirect(get_school_default_route(tenant), schema_name=tenant.schema_name)
         return render(request, 'tenant/login.html', {'tenant': tenant, 'error': 'Invalid credentials'})
     return render(request, 'tenant/login.html', {'tenant': tenant})
 
@@ -136,7 +156,7 @@ def tenant_root_redirect(request, schema_name):
     if tenant.tenant_type == 'gym':
         return redirect('gym_dashboard', schema_name=schema_name)
     else:
-        return redirect('dashboard', schema_name=schema_name)
+        return redirect(get_school_default_route(tenant), schema_name=schema_name)
 
 
 urlpatterns = [
