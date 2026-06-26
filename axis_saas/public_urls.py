@@ -9,7 +9,7 @@ from django_tenants.utils import schema_context
 
 from .models import SchoolClient
 
-from .views import gym_generate_subscription, gym_cancel_subscription, gym_update_subscription, gym_edit_attendance, add_student, dashboard, debug_payments_api, defaulters, edit_student, family_payment, fee_collection, fee_receipt, fee_settings, fee_status_api, fee_structure, gym_attendance, gym_checkin_api, gym_checkout_api, gym_customer_add, gym_customer_edit, gym_customer_list, gym_customer_profile, gym_dashboard, gym_payment, gym_receipt, gym_reports, gym_settings, manual_generate_api, manual_generate_single_api, reports, settings, student_fee_records_api, student_list, student_payments_api, student_current_fee_status_api, student_profile, student_search_api, gym_revenue_stats_api, gym_attendance_stats_api, gym_customers_list_api, gym_customer_detail_api, gym_subscription_status_api, gym_attendance_data_api, gym_eligible_customers_api, gym_search_customer_api, gym_export_attendance_api, stock_management, product_detail, add_category, delete_category, add_product, delete_product, sell_separately, mobile_dashboard, mobile_more
+from .views import gym_generate_subscription, gym_cancel_subscription, gym_update_subscription, gym_edit_attendance, add_student, dashboard, debug_payments_api, defaulters, edit_student, family_payment, fee_collection, fee_receipt, fee_settings, fee_status_api, fee_structure, gym_attendance, gym_checkin_api, gym_checkout_api, gym_customer_add, gym_customer_edit, gym_customer_list, gym_customer_profile, gym_dashboard, gym_payment, gym_receipt, gym_reports, gym_settings, manual_generate_api, manual_generate_single_api, reports, settings, student_fee_records_api, student_list, student_payments_api, student_current_fee_status_api, student_profile, student_search_api, gym_revenue_stats_api, gym_attendance_stats_api, gym_customers_list_api, gym_customer_detail_api, gym_subscription_status_api, gym_attendance_data_api, gym_eligible_customers_api, gym_search_customer_api, gym_export_attendance_api, stock_management, product_detail, add_category, delete_category, add_product, delete_product, sell_separately, mobile_dashboard, mobile_more, mobile_student_list, mobile_student_profile
 from .pwa_views import manifest, service_worker
 
 
@@ -113,6 +113,8 @@ def login_required_for_schema(view_func):
 dashboard_view = portal_wrapper(login_required_for_schema(dashboard))
 mobile_dashboard_view = portal_wrapper(login_required_for_schema(mobile_dashboard))
 mobile_more_view = portal_wrapper(login_required_for_schema(mobile_more))
+mobile_student_list_view = portal_wrapper(login_required_for_schema(mobile_student_list))
+mobile_student_profile_view = portal_wrapper(login_required_for_schema(mobile_student_profile))
 student_list_view = portal_wrapper(login_required_for_schema(student_list))
 student_profile_view = portal_wrapper(login_required_for_schema(student_profile))
 fee_collection_view = portal_wrapper(login_required_for_schema(fee_collection))
@@ -186,6 +188,8 @@ urlpatterns = [
     
     path('portal/<slug:schema_name>/dashboard/mobile/more/', mobile_more_view, name='mobile_more'),
     path('portal/<slug:schema_name>/dashboard/mobile/', mobile_dashboard_view, name='mobile_dashboard'),
+    path('portal/<slug:schema_name>/students/mobile/', mobile_student_list_view, name='mobile_student_list'),
+    path('portal/<slug:schema_name>/students/mobile/<int:student_id>/', mobile_student_profile_view, name='mobile_student_profile'),
     path('portal/<slug:schema_name>/dashboard/', dashboard_view, name='dashboard'),
     path('portal/<slug:schema_name>/students/', student_list_view, name='student_list'),
     path('portal/<slug:schema_name>/students/add/', add_student_view, name='add_student'),

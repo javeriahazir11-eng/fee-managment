@@ -161,9 +161,7 @@ def mobile_more(request, schema_name):
     tenant = get_tenant(request, schema_name)
     return render(request, 'mobile/more.html', {'tenant': tenant})
 
-@require_tenant_type(['school'])
-@require_school_feature('students')
-def student_list(request, schema_name):
+def get_student_list_context(request, schema_name):
     tenant = get_tenant(request, schema_name)
     query = request.GET.get('q', '')
     grade = request.GET.get('grade', '')
@@ -178,35 +176,43 @@ def student_list(request, schema_name):
                 Q(father_name__icontains=query) | Q(father_cnic__icontains=query) |
                 Q(parent_mobile__icontains=query) | Q(grade__icontains=query)
             )
-        if grade: students = students.filter(grade=grade)
-        if section: students = students.filter(section=section)
-        if status: students = students.filter(status=status)
+        if grade:
+            students = students.filter(grade=grade)
+        if section:
+            students = students.filter(section=section)
+        if status:
+            students = students.filter(status=status)
         students = students.order_by('-enrolled_on')
-        # Annotate pending amount
         for s in students:
             s.pending_amount = get_overall_pending(s)
-        # Paginate
-        from django.core.paginator import Paginator
         paginator = Paginator(students, 20)
         page_obj = paginator.get_page(page_number)
-        grades = Student.objects.values_list('grade', flat=True).distinct().order_by('grade')
-        grades = list(grades)
-        sections = Student.objects.values_list('section', flat=True).distinct().order_by('section')
-        sections = list(sections)
+        grades = list(Student.objects.values_list('grade', flat=True).distinct().order_by('grade'))
+        sections = list(Student.objects.values_list('section', flat=True).distinct().order_by('section'))
         status_choices = Student.STATUS_CHOICES
-    context = {
+    return {
         'tenant': tenant,
-        'students': page_obj,          # page object, not the full queryset
+        'students': page_obj,
         'grades': grades,
         'sections': sections,
         'status_choices': status_choices,
         'search_query': query,
         'logo_url': tenant.school_logo.url if tenant.school_logo else None,
     }
-    return render(request, 'tenant/student_list.html', context)
+
 @require_tenant_type(['school'])
 @require_school_feature('students')
-def student_profile(request, schema_name, student_id):
+def student_list(request, schema_name):
+    context = get_student_list_context(request, schema_name)
+    return render(request, 'tenant/student_list.html', context)
+
+@require_tenant_type(['school'])
+@require_school_feature('students')
+def mobile_student_list(request, schema_name):
+    context = get_student_list_context(request, schema_name)
+    return render(request, 'mobile/student_list.html', context)
+
+def get_student_profile_context(request, schema_name, student_id):
     tenant = get_tenant(request, schema_name)
     page = request.GET.get('page', 1)
     search_date = request.GET.get('date', '').strip()
@@ -220,17 +226,14 @@ def student_profile(request, schema_name, student_id):
         total_fee = fee_records_qs.aggregate(Sum('amount'))['amount__sum'] or 0
         fee_records = list(fee_records_qs)
 
-        # Get all payments, ordered by date ascending for cumulative calculation
         payments_qs_all = student.payments.all().order_by('payment_date')
         if search_date:
             try:
-                from datetime import datetime
                 parsed = datetime.strptime(search_date, '%Y-%m-%d').date()
                 payments_qs_all = payments_qs_all.filter(payment_date=parsed)
             except ValueError:
                 pass
 
-        # First pass: compute total items cost from all payments
         total_items_cost_all = Decimal('0')
         items_cost_per_payment = {}
         for p in payments_qs_all:
@@ -239,29 +242,23 @@ def student_profile(request, schema_name, student_id):
             items_cost_per_payment[p.id] = cost
             total_items_cost_all += cost
 
-        # Second pass: compute cumulative fee and items paid, and remaining balance
         cumulative_fee_paid = Decimal('0')
         cumulative_items_paid = Decimal('0')
         payment_list = []
 
         for p in payments_qs_all:
-            # fee_paid = sum of paid_amount of linked fee records for this payment
             fee_paid = sum(fr.paid_amount for fr in p.fee_records.all())
             items_cost = items_cost_per_payment.get(p.id, Decimal('0'))
-            items_paid = p.amount - fee_paid  # rest goes to items
-
-            # total due before this payment = (total_fee - cumulative_fee_paid_before) + (total_items_cost_all - cumulative_items_paid_before)
+            items_paid = p.amount - fee_paid
             total_due_before = (total_fee - cumulative_fee_paid) + (total_items_cost_all - cumulative_items_paid)
 
             cumulative_fee_paid += fee_paid
             cumulative_items_paid += items_paid
 
-            # remaining balance after this payment
             remaining_balance = (total_fee - cumulative_fee_paid) + (total_items_cost_all - cumulative_items_paid)
             if remaining_balance < 0:
                 remaining_balance = Decimal('0')
 
-            # Determine type
             has_fee = p.fee_records.exists()
             remarks = (p.remarks or '').lower()
             has_items = 'items sold' in remarks
@@ -277,25 +274,21 @@ def student_profile(request, schema_name, student_id):
 
             payment_list.append({
                 'payment': p,
-                'fee_paid': fee_paid,          # kept if needed elsewhere
+                'fee_paid': fee_paid,
                 'total_due_before': total_due_before,
                 'remaining_balance': remaining_balance,
             })
 
-        # Reverse for descending display (most recent first)
         payment_list.reverse()
-
-        # Paginate the list
         paginator = Paginator(payment_list, 10)
         page_obj = paginator.get_page(page)
 
         total_paid = student.payments.aggregate(Sum('amount'))['amount__sum'] or 0
-        # fee_paid_total from fee_records
         fee_paid_total = sum(fr.paid_amount for fr in fee_records)
         item_purchase_total = total_paid - fee_paid_total
         pending_total = total_fee + total_items_cost_all - total_paid
 
-        context = {
+        return {
             'tenant': tenant,
             'student': student,
             'fee_records': fee_records,
@@ -309,7 +302,19 @@ def student_profile(request, schema_name, student_id):
             'logo_url': tenant.school_logo.url if tenant.school_logo else None,
             'search_date': search_date,
         }
-        return render(request, 'tenant/student_profile.html', context)
+
+@require_tenant_type(['school'])
+@require_school_feature('students')
+def student_profile(request, schema_name, student_id):
+    context = get_student_profile_context(request, schema_name, student_id)
+    return render(request, 'tenant/student_profile.html', context)
+
+@require_tenant_type(['school'])
+@require_school_feature('students')
+def mobile_student_profile(request, schema_name, student_id):
+    context = get_student_profile_context(request, schema_name, student_id)
+    return render(request, 'mobile/student_profile.html', context)
+
 @require_tenant_type(['school'])
 def fee_receipt(request, schema_name, receipt_id):
     tenant = get_tenant(request, schema_name)
