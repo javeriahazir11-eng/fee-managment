@@ -2391,7 +2391,7 @@ def _extract_item_sales_from_remarks(remarks):
 # ==================== STOCK MANAGEMENT VIEWS ====================
 
 @require_tenant_type(['school'])
-def stock_management(request, schema_name):
+def stock_management(request, schema_name, force_mobile=False):
     """Main stock management page: list categories and products (RAW SQL)."""
     from django.shortcuts import render
     from django.db import connection
@@ -2483,11 +2483,12 @@ def stock_management(request, schema_name):
             'top_items': top_items,
             'logo_url': tenant.school_logo.url if tenant.school_logo else None,
         }
-    return render(request, 'tenant/stock_management.html', context)
+        template = 'mobile/stock_management.html' if (is_mobile_user_agent(request) or force_mobile) else 'tenant/stock_management.html'
+    return render(request, template, context)
 
 @require_tenant_type(['school'])
 @require_school_feature('stock_management')
-def product_detail(request, schema_name, product_id):
+def product_detail(request, schema_name, product_id, force_mobile=False):
     """Detailed product analytics page with sales history and recent receipts."""
     tenant = get_tenant(request, schema_name)
     with schema_context(schema_name):
@@ -2529,11 +2530,24 @@ def product_detail(request, schema_name, product_id):
             'recent_buyers': [{'id': sid, 'name': name} for sid, name in buyer_info.items()][:8],
             'logo_url': tenant.school_logo.url if tenant.school_logo else None,
         }
-    return render(request, 'tenant/product_detail.html', context)
+        template = 'mobile/product_detail.html' if (is_mobile_user_agent(request) or force_mobile) else 'tenant/product_detail.html'
+    return render(request, template, context)
 
 
 @require_tenant_type(['school'])
 @require_school_feature('stock_management')
+
+
+# ==================== MOBILE WRAPPERS ====================
+@require_tenant_type(['school'])
+def mobile_stock_management(request, schema_name):
+    """Mobile-only stock management view."""
+    return stock_management(request, schema_name, force_mobile=True)
+
+@require_tenant_type(['school'])
+def mobile_product_detail(request, schema_name, product_id):
+    """Mobile-only product detail view."""
+    return product_detail(request, schema_name, product_id, force_mobile=True)
 def add_category(request, schema_name):
     """Add or edit a product category."""
     from django.shortcuts import redirect, get_object_or_404

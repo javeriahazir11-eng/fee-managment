@@ -1,0 +1,241 @@
+{% extends 'mobile/base.html' %}
+{% load fee_extras %}
+{% block title %}{{ product.name }} | Stock{% endblock %}
+
+{% block extra_head %}
+<style>
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    font-size: 0.9rem;
+  }
+  .back-link svg {
+    width: 20px;
+    height: 20px;
+    stroke: currentColor;
+  }
+
+  .product-header {
+    background: var(--surface);
+    border-radius: 1.5rem;
+    padding: 1.2rem;
+    margin-bottom: 1rem;
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.03);
+  }
+  .product-header .sku {
+    font-size: 0.7rem;
+    color: var(--muted);
+    font-family: monospace;
+    letter-spacing: 0.3px;
+  }
+  .product-header h1 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin: 0.2rem 0 0.1rem;
+    color: var(--text);
+  }
+  .product-header .category-tag {
+    display: inline-block;
+    background: rgba(59,130,246,0.12);
+    color: var(--primary);
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .product-header .notes {
+    margin-top: 0.5rem;
+    color: var(--muted);
+    font-size: 0.9rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.5rem;
+  }
+
+  .info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .info-card {
+    background: var(--surface);
+    border-radius: 1.25rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    text-align: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+  }
+  .info-card .label {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    color: var(--muted);
+    letter-spacing: 0.3px;
+  }
+  .info-card .value {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin-top: 0.15rem;
+    color: var(--text);
+  }
+  .info-card .value.low {
+    color: var(--danger);
+  }
+
+  .section-title {
+    font-size: 1rem;
+    font-weight: 700;
+    margin: 1rem 0 0.5rem;
+    color: var(--text);
+  }
+
+  .buyer-list, .sales-list {
+    background: var(--surface);
+    border-radius: 1.25rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    margin-bottom: 1rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+  }
+  .buyer-item, .sale-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+  .buyer-item:last-child, .sale-item:last-child {
+    border-bottom: none;
+  }
+  .buyer-item .name {
+    font-weight: 600;
+  }
+  .buyer-item a {
+    color: var(--primary);
+    text-decoration: none;
+  }
+  .sale-item .student {
+    font-weight: 600;
+  }
+  .sale-item .amount {
+    font-weight: 700;
+    color: var(--primary);
+  }
+  .sale-item .meta {
+    color: var(--muted);
+    font-size: 0.7rem;
+  }
+  .sale-item .qty {
+    background: var(--surface-alt);
+    padding: 0.1rem 0.4rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+  }
+
+  .empty-row {
+    text-align: center;
+    color: var(--muted);
+    padding: 0.5rem 0;
+    font-size: 0.85rem;
+  }
+
+  .bottom-spacer {
+    height: 80px;
+  }
+</style>
+{% endblock %}
+
+{% block body %}
+<a href="{% url 'stock_management' schema_name=tenant.schema_name %}" class="back-link">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M15 18l-6-6 6-6"/>
+  </svg>
+  Back to Stock
+</a>
+
+<div class="product-header">
+  <div class="sku">{{ product.sku }}</div>
+  <h1>{{ product.name }}</h1>
+  <span class="category-tag">{{ product.category.name }}</span>
+  {% if product.notes %}
+  <div class="notes">{{ product.notes }}</div>
+  {% endif %}
+</div>
+
+<div class="info-grid">
+  <div class="info-card">
+    <div class="label">Price</div>
+    <div class="value">₹{{ product.selling_price|floatformat:2 }}</div>
+  </div>
+  <div class="info-card">
+    <div class="label">Stock</div>
+    <div class="value {% if product.quantity < 10 %}low{% endif %}">{{ product.quantity }}</div>
+  </div>
+  <div class="info-card">
+    <div class="label">Stock Value</div>
+    <div class="value">₹{{ analytics.stock_value|humanize_number }}</div>
+  </div>
+  <div class="info-card">
+    <div class="label">Units Sold</div>
+    <div class="value">{{ analytics.total_units_sold }}</div>
+  </div>
+  <div class="info-card">
+    <div class="label">Total Sales</div>
+    <div class="value">₹{{ analytics.total_sales_value|humanize_number }}</div>
+  </div>
+  <div class="info-card">
+    <div class="label">Last Sale</div>
+    <div class="value">
+      {% if analytics.last_sale_date %}
+        {{ analytics.last_sale_date|date:"d M Y" }}
+      {% else %}
+        —
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="section-title">Recent Buyers</div>
+<div class="buyer-list">
+  {% if recent_buyers %}
+    {% for buyer in recent_buyers %}
+    <div class="buyer-item">
+      <span class="name">{{ buyer.name }}</span>
+      <a href="{% url 'student_profile' schema_name=tenant.schema_name student_id=buyer.id %}#payment-history">View</a>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty-row">No buyers yet.</div>
+  {% endif %}
+</div>
+
+<div class="section-title">Sales History</div>
+<div class="sales-list">
+  {% if sales_events %}
+    {% for event in sales_events|slice:":10" %}
+    <div class="sale-item">
+      <div>
+        <div class="student">{{ event.student.name }}</div>
+        <div class="meta">{{ event.payment.payment_date|date:"d M Y" }}</div>
+      </div>
+      <div>
+        <span class="qty">{{ event.item.quantity }}×</span>
+        <span class="amount">₹{{ event.item.line_total|floatformat:2 }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty-row">No sales recorded for this product.</div>
+  {% endif %}
+</div>
+
+<div class="bottom-spacer"></div>
+{% endblock %}
