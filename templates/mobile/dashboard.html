@@ -1,0 +1,109 @@
+{% extends 'mobile/base.html' %}
+{% load fee_extras %}
+{% block title %}Dashboard | {{ tenant.name }}{% endblock %}
+
+{% block body %}
+<div style="margin-bottom: 16px;">
+    <h1 style="font-size: 20px; font-weight: 700; margin: 0 0 4px;">Welcome back!<span style="background: #ef4444; color: white; font-size: 12px; padding: 2px 8px; border-radius: 12px; margin-left: 8px;">📱 Mobile</span></h1>
+    <p style="color: var(--muted); font-size: 14px;">{{ tenant.name }} • Today's summary</p>
+</div>
+
+<!-- KPI Scrollable Cards -->
+<div class="scroll-x" style="margin-bottom: 16px;">
+    <div style="background: var(--surface); padding: 14px 16px; border-radius: var(--radius); min-width: 140px; box-shadow: var(--shadow);">
+        <div style="font-size: 12px; color: var(--muted);">Students</div>
+        <div style="font-size: 26px; font-weight: 700;">{{ total_students|humanize_number }}</div>
+        <div style="font-size: 11px; color: var(--success);">Enrolled</div>
+    </div>
+    <div style="background: var(--surface); padding: 14px 16px; border-radius: var(--radius); min-width: 140px; box-shadow: var(--shadow);">
+        <div style="font-size: 12px; color: var(--muted);">Revenue</div>
+        <div style="font-size: 26px; font-weight: 700;">₹{{ total_revenue|humanize_number }}</div>
+        <div style="font-size: 11px; color: var(--primary);">All time</div>
+    </div>
+    <div style="background: var(--surface); padding: 14px 16px; border-radius: var(--radius); min-width: 140px; box-shadow: var(--shadow);">
+        <div style="font-size: 12px; color: var(--muted);">Pending</div>
+        <div style="font-size: 26px; font-weight: 700; color: var(--danger);">₹{{ total_pending|humanize_number }}</div>
+        <div style="font-size: 11px; color: var(--danger);">Due</div>
+    </div>
+    <div style="background: var(--surface); padding: 14px 16px; border-radius: var(--radius); min-width: 140px; box-shadow: var(--shadow);">
+        <div style="font-size: 12px; color: var(--muted);">Collection</div>
+        <div style="font-size: 26px; font-weight: 700;">{{ collection_rate }}%</div>
+        <div style="font-size: 11px; color: var(--success);">Rate</div>
+    </div>
+</div>
+
+<!-- Quick Actions Grid -->
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;">
+    <a href="{% url 'add_student' schema_name=tenant.schema_name %}" style="background: var(--surface); border-radius: var(--radius); padding: 16px 8px; text-align: center; text-decoration: none; color: var(--text); box-shadow: var(--shadow);">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
+        <div style="font-size: 11px; margin-top: 4px; font-weight: 500;">Add</div>
+    </a>
+    <a href="{% url 'fee_collection' schema_name=tenant.schema_name %}" style="background: var(--surface); border-radius: var(--radius); padding: 16px 8px; text-align: center; text-decoration: none; color: var(--text); box-shadow: var(--shadow);">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
+        <div style="font-size: 11px; margin-top: 4px; font-weight: 500;">Collect</div>
+    </a>
+    <a href="{% url 'defaulters' schema_name=tenant.schema_name %}" style="background: var(--surface); border-radius: var(--radius); padding: 16px 8px; text-align: center; text-decoration: none; color: var(--text); box-shadow: var(--shadow);">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <div style="font-size: 11px; margin-top: 4px; font-weight: 500;">Defaulters</div>
+    </a>
+    <a href="{% url 'reports' schema_name=tenant.schema_name %}" style="background: var(--surface); border-radius: var(--radius); padding: 16px 8px; text-align: center; text-decoration: none; color: var(--text); box-shadow: var(--shadow);">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        <div style="font-size: 11px; margin-top: 4px; font-weight: 500;">Reports</div>
+    </a>
+    <a href="{% url 'stock_management' schema_name=tenant.schema_name %}" style="background: var(--surface); border-radius: var(--radius); padding: 16px 8px; text-align: center; text-decoration: none; color: var(--text); box-shadow: var(--shadow);">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M20 7h-4.18A3 3 0 0016 5.18V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v1.18A3 3 0 008.18 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M12 12v4m-2-2h4"/></svg>
+        <div style="font-size: 11px; margin-top: 4px; font-weight: 500;">Stock</div>
+    </a>
+    <a href="{% url 'sell_separately' schema_name=tenant.schema_name %}" style="background: var(--surface); border-radius: var(--radius); padding: 16px 8px; text-align: center; text-decoration: none; color: var(--text); box-shadow: var(--shadow);">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
+        <div style="font-size: 11px; margin-top: 4px; font-weight: 500;">Sell</div>
+    </a>
+    <a href="{% url 'fee_structure' schema_name=tenant.schema_name %}" style="background: var(--surface); border-radius: var(--radius); padding: 16px 8px; text-align: center; text-decoration: none; color: var(--text); box-shadow: var(--shadow);">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+        <div style="font-size: 11px; margin-top: 4px; font-weight: 500;">Fees</div>
+    </a>
+    <a href="{% url 'settings' schema_name=tenant.schema_name %}" style="background: var(--surface); border-radius: var(--radius); padding: 16px 8px; text-align: center; text-decoration: none; color: var(--text); box-shadow: var(--shadow);">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <div style="font-size: 11px; margin-top: 4px; font-weight: 500;">Settings</div>
+    </a>
+</div>
+
+<!-- Recent Payments -->
+<div style="background: var(--surface); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); margin-bottom: 16px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="font-size: 16px; font-weight: 600; margin:0;">Recent Payments</h3>
+        <a href="{% url 'reports' schema_name=tenant.schema_name %}?type=collection&quick_filter=all" style="font-size: 12px; color: var(--primary); text-decoration: none;">See all →</a>
+    </div>
+    {% if recent_payments %}
+        {% for p in recent_payments %}
+        <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border);">
+            <div>
+                <div style="font-weight: 500; font-size: 14px;">{{ p.student.name }}</div>
+                <div style="font-size: 11px; color: var(--muted);">{{ p.receipt_number }} • {{ p.payment_date|date:"d M Y" }}</div>
+            </div>
+            <div style="font-weight: 700; color: var(--primary);">₹{{ p.amount|floatformat:2 }}</div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div style="text-align: center; color: var(--muted); padding: 12px 0;">No payments yet.</div>
+    {% endif %}
+</div>
+
+<!-- Top Defaulters (compact) -->
+<div style="background: var(--surface); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="font-size: 16px; font-weight: 600; margin:0;">Top Defaulters</h3>
+        <a href="{% url 'defaulters' schema_name=tenant.schema_name %}" style="font-size: 12px; color: var(--primary); text-decoration: none;">View all →</a>
+    </div>
+    {% if top_defaulters %}
+        {% for d in top_defaulters %}
+        <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border);">
+            <span style="font-size: 13px;">{{ d.student.name }}</span>
+            <span style="font-weight: 600; color: var(--danger);">₹{{ d.pending|floatformat:2 }}</span>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div style="text-align: center; color: var(--muted); padding: 12px 0;">No defaulters.</div>
+    {% endif %}
+</div>
+{% endblock %}
