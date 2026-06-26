@@ -548,4 +548,12 @@
         });
     })();
 </script>
+<script>
+    if (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) {
+        const currentPath = window.location.pathname.replace(/\/+$/, '');
+        if (!currentPath.endsWith('/dashboard/mobile')) {
+            window.location.replace("{% url 'mobile_dashboard' schema_name=tenant.schema_name %}");
+        }
+    }
+</script>
 {% endblock %}
