@@ -156,6 +156,12 @@ def mobile_dashboard(request, schema_name):
     return render(request, 'mobile/dashboard.html', context)
 
 @require_tenant_type(['school'])
+@require_school_feature('dashboard')
+def mobile_more(request, schema_name):
+    tenant = get_tenant(request, schema_name)
+    return render(request, 'mobile/more.html', {'tenant': tenant})
+
+@require_tenant_type(['school'])
 @require_school_feature('students')
 def student_list(request, schema_name):
     tenant = get_tenant(request, schema_name)
