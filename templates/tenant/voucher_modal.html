@@ -122,6 +122,73 @@
         gap: 0.5rem;
         margin-top: 1rem;
     }
+    .voucher-form {
+        padding: 1rem 0;
+    }
+    .form-field {
+        margin-bottom: 1rem;
+    }
+    .form-field label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: var(--text);
+    }
+    .form-field input[type="text"],
+    .form-field input[type="number"],
+    .form-field input[type="checkbox"] {
+        padding: 0.5rem;
+        border-radius: 0.3rem;
+        border: 1px solid var(--border);
+        font-size: 0.95rem;
+        background: var(--surface);
+        color: var(--text);
+    }
+    .form-field input[type="text"],
+    .form-field input[type="number"] {
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .form-field input[type="checkbox"] {
+        margin-right: 0.5rem;
+        cursor: pointer;
+    }
+    .form-field input[type="checkbox"] + label {
+        display: inline;
+        margin-bottom: 0;
+        font-weight: normal;
+    }
+    #chargesContainer {
+        background: var(--surface-alt);
+        padding: 0.5rem;
+        border-radius: 0.3rem;
+        margin-bottom: 0.5rem;
+    }
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid var(--border);
+    }
+    .modal-header h3 {
+        margin: 0;
+        font-size: 1.3rem;
+        font-weight: 700;
+    }
+    .close-modal {
+        background: none;
+        border: none;
+        font-size: 1.8rem;
+        cursor: pointer;
+        color: var(--text-muted);
+        padding: 0;
+        line-height: 1;
+    }
+    .close-modal:hover {
+        color: var(--text);
+    }
 </style>
 
 <script>
@@ -201,7 +268,7 @@ function loadVoucherStatus(studentId, schema) {
             }
             if (data.exists && !data.can_edit) {
                 // Scenario 3: paid, show voucher only
-                showVoucherDisplay(data, schema, studentId);
+                showVoucherDisplay(data, schema, studentId, false);
                 closeVoucherModal();
             } else if (data.exists && data.can_edit) {
                 // Scenario 2: exists and unpaid, show edit form
@@ -318,7 +385,7 @@ function submitVoucher(studentId, schema, isEdit) {
         }
         if (data.success) {
             // Show voucher
-            showVoucherDisplay(data.voucher, schema, studentId);
+            showVoucherDisplay(data.voucher, schema, studentId, data.voucher.can_edit);
             closeVoucherModal();
             // Optionally reload page to update fee records
             // location.reload(); // maybe
@@ -331,7 +398,7 @@ function submitVoucher(studentId, schema, isEdit) {
     });
 }
 
-function showVoucherDisplay(voucherData, schema, studentId) {
+function showVoucherDisplay(voucherData, schema, studentId, canEdit = false) {
     // Build receipt HTML
     let html = `<div class="voucher-receipt" id="voucherReceipt">`;
     html += `<div class="receipt-header">
@@ -353,7 +420,7 @@ function showVoucherDisplay(voucherData, schema, studentId) {
             html += `<tr><td>${ch.title}</td><td>${ch.amount.toFixed(2)}</td></tr>`;
         });
     }
-    const total = voucherData.fee_amount + voucherData.charges.reduce((sum, ch) => sum + ch.amount, 0);
+    const total = voucherData.fee_amount + (voucherData.charges ? voucherData.charges.reduce((sum, ch) => sum + ch.amount, 0) : 0);
     html += `<tr class="total-row"><td><strong>Total</strong></td><td><strong>${total.toFixed(2)}</strong></td></tr>`;
     html += `</tbody></table></div>`;
     if (voucherData.total_pending > 0) {
@@ -363,18 +430,17 @@ function showVoucherDisplay(voucherData, schema, studentId) {
     html += `</div>`;
 
     voucherDisplayBody.innerHTML = html;
-    // Show edit button if can_edit (we passed from previous step)
-    // We'll check if the fee is unpaid by looking at the data? We'll need to fetch status again.
-    // For simplicity, we'll check if there is a fee record with paid_amount = 0.
-    // We can pass a flag from the API. We'll adjust later.
-    // For now, we'll hide edit by default; we'll enable it if we know it's editable.
     const editBtn = document.getElementById('editVoucherBtn');
-    // We'll set this based on can_edit from the status call.
-    // We'll store a flag in the modal data.
-    voucherDisplayModal.dataset.canEdit = 'false';
-    // We'll set it to true if the fee was unpaid.
-    // We'll modify the showVoucherDisplay call to pass canEdit.
-    editBtn.style.display = 'none';
+    editBtn.style.display = canEdit ? 'block' : 'none';
+    
+    // Attach edit button handler if editable
+    if (canEdit) {
+        editBtn.onclick = function() {
+            // Re-open voucher modal in edit mode
+            openVoucherModal(studentId, schema);
+        };
+    }
+    
     voucherDisplayModal.style.display = 'flex';
 }
 

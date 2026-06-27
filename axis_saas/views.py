@@ -48,7 +48,7 @@ def require_school_feature(feature_key):
     return decorator
 
 
-from .models import SchoolClient, Student, FeeStructure, FeeRecord, PaymentTransaction, SchoolFeeSettings, Product, ProductCategory
+from .models import SchoolClient, Student, FeeStructure, FeeRecord, PaymentTransaction, SchoolFeeSettings, Product, ProductCategory, FeeVoucher
 from .forms import StudentForm, FeeCollectionForm, FeeSettingsForm, FeeStructureForm, FamilyPaymentForm
 
 
@@ -3093,3 +3093,259 @@ def mobile_settings(request, schema_name):
         return redirect('settings', schema_name=schema_name)
     context = {'tenant': tenant, 'logo_url': tenant.school_logo.url if tenant.school_logo else None}
     return render(request, 'mobile/settings.html', context)
+
+
+# ------------------- Voucher API Endpoints -------------------
+@csrf_exempt
+@require_http_methods(["GET"])
+def student_voucher_status_api(request, schema_name, student_id):
+    """Check if voucher exists for current month and return status"""
+    tenant = get_tenant(request, schema_name)
+    with schema_context(schema_name):
+        student = get_object_or_404(Student, id=student_id)
+        today = date.today()
+        current_month = today.month
+        current_year = today.year
+        
+        # Check if voucher exists for current month
+        voucher = FeeVoucher.objects.filter(
+            student=student,
+            month=current_month,
+            year=current_year
+        ).first()
+        
+        # Get default fee from FeeStructure
+        fee_structure = FeeStructure.objects.filter(grade=student.grade).first()
+        default_fee = fee_structure.monthly_fee if fee_structure else Decimal('0')
+        
+        # Calculate total pending (from all past fee records that are not fully paid)
+        total_pending = Decimal('0')
+        pending_records = FeeRecord.objects.filter(
+            student=student
+        ).exclude(status='paid')
+        for record in pending_records:
+            total_pending += record.remaining
+        
+        if voucher:
+            # Voucher exists - check if it can be edited
+            fee_record = voucher.fee_record
+            can_edit = False
+            if fee_record and fee_record.paid_amount == 0:
+                can_edit = True
+            
+            response = {
+                'exists': True,
+                'can_edit': can_edit,
+                'student_name': student.name,
+                'student_roll': student.roll_number,
+                'grade': student.grade,
+                'section': student.section,
+                'amount': float(voucher.custom_fee or voucher.base_fee),
+                'default_fee': float(default_fee),
+                'extra_charges': voucher.extra_charges or [],
+                'default_charges': student.default_extra_charges or [],
+                'total_pending': float(total_pending),
+                'receipt_number': voucher.receipt_number,
+                'fee_amount': float(voucher.custom_fee or voucher.base_fee),
+                'charges': voucher.extra_charges or [],
+                'generated_on': voucher.created_at.strftime('%Y-%m-%d'),
+                'due_date': (today.replace(day=1) + timedelta(days=32)).replace(day=1).strftime('%Y-%m-%d'),
+                'status': voucher.status,
+            }
+        else:
+            # No voucher exists for current month
+            response = {
+                'exists': False,
+                'can_edit': False,
+                'student_name': student.name,
+                'student_roll': student.roll_number,
+                'grade': student.grade,
+                'section': student.section,
+                'default_fee': float(default_fee),
+                'default_charges': student.default_extra_charges or [],
+                'total_pending': float(total_pending),
+            }
+        
+        return JsonResponse(response)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def student_generate_voucher_api(request, schema_name, student_id):
+    """Generate a new fee voucher for current month"""
+    tenant = get_tenant(request, schema_name)
+    with schema_context(schema_name):
+        student = get_object_or_404(Student, id=student_id)
+        today = date.today()
+        current_month = today.month
+        current_year = today.year
+        
+        try:
+            data = json.loads(request.body)
+        except:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        
+        custom_amount = data.get('custom_amount')
+        charges = data.get('charges', [])
+        save_default_charges = data.get('save_default_charges', False)
+        
+        # Get fee structure for this student's grade
+        fee_structure = FeeStructure.objects.filter(grade=student.grade).first()
+        base_fee = fee_structure.monthly_fee if fee_structure else Decimal('0')
+        
+        # Determine custom fee
+        if custom_amount is not None and custom_amount > 0:
+            custom_fee = Decimal(str(custom_amount))
+        else:
+            custom_fee = Decimal('0')
+        
+        # Save charges to student's defaults if requested
+        if save_default_charges and charges:
+            student.default_extra_charges = charges
+            student.save()
+        
+        # Calculate total pending from previous months
+        total_pending = Decimal('0')
+        pending_records = FeeRecord.objects.filter(
+            student=student,
+            status__in=['pending', 'partial', 'overdue']
+        )
+        for record in pending_records:
+            total_pending += record.remaining
+        
+        # Create or update FeeRecord
+        fee_record, created = FeeRecord.objects.get_or_create(
+            student=student,
+            month=current_month,
+            year=current_year,
+            defaults={
+                'amount': custom_fee if custom_fee > 0 else base_fee,
+                'due_date': today.replace(day=1) + timedelta(days=15),
+                'extra_charges': charges,
+                'status': 'pending',
+            }
+        )
+        
+        # Create or update FeeVoucher
+        voucher, created = FeeVoucher.objects.update_or_create(
+            student=student,
+            month=current_month,
+            year=current_year,
+            defaults={
+                'fee_record': fee_record,
+                'base_fee': base_fee,
+                'custom_fee': custom_fee,
+                'extra_charges': charges,
+                'save_charges_for_future': save_default_charges,
+                'status': 'generated',
+            }
+        )
+        
+        response = {
+            'success': True,
+            'voucher': {
+                'receipt_number': voucher.receipt_number,
+                'student_name': student.name,
+                'student_roll': student.roll_number,
+                'grade': student.grade,
+                'section': student.section,
+                'month': current_month,
+                'year': current_year,
+                'fee_amount': float(custom_fee if custom_fee > 0 else base_fee),
+                'charges': charges,
+                'total_pending': float(total_pending),
+                'generated_on': voucher.created_at.strftime('%Y-%m-%d'),
+                'due_date': fee_record.due_date.strftime('%Y-%m-%d'),
+                'can_edit': True,
+            }
+        }
+        return JsonResponse(response)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def student_update_voucher_api(request, schema_name, student_id):
+    """Update an existing fee voucher"""
+    tenant = get_tenant(request, schema_name)
+    with schema_context(schema_name):
+        student = get_object_or_404(Student, id=student_id)
+        today = date.today()
+        current_month = today.month
+        current_year = today.year
+        
+        try:
+            data = json.loads(request.body)
+        except:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        
+        voucher = get_object_or_404(
+            FeeVoucher,
+            student=student,
+            month=current_month,
+            year=current_year
+        )
+        
+        # Check if voucher can be edited (only if not paid or partially paid)
+        if voucher.fee_record and voucher.fee_record.paid_amount > 0:
+            return JsonResponse({'error': 'Cannot edit a paid or partially paid voucher'}, status=403)
+        
+        custom_amount = data.get('custom_amount')
+        charges = data.get('charges', [])
+        save_default_charges = data.get('save_default_charges', False)
+        
+        # Get fee structure
+        fee_structure = FeeStructure.objects.filter(grade=student.grade).first()
+        base_fee = fee_structure.monthly_fee if fee_structure else Decimal('0')
+        
+        # Determine custom fee
+        if custom_amount is not None and custom_amount > 0:
+            custom_fee = Decimal(str(custom_amount))
+        else:
+            custom_fee = Decimal('0')
+        
+        # Update student's default charges if requested
+        if save_default_charges and charges:
+            student.default_extra_charges = charges
+            student.save()
+        
+        # Update FeeRecord
+        fee_record = voucher.fee_record
+        if fee_record:
+            fee_record.amount = custom_fee if custom_fee > 0 else base_fee
+            fee_record.extra_charges = charges
+            fee_record.save()
+        
+        # Update FeeVoucher
+        voucher.custom_fee = custom_fee
+        voucher.extra_charges = charges
+        voucher.save_charges_for_future = save_default_charges
+        voucher.save()
+        
+        # Calculate total pending
+        total_pending = Decimal('0')
+        pending_records = FeeRecord.objects.filter(
+            student=student,
+            status__in=['pending', 'partial', 'overdue']
+        )
+        for record in pending_records:
+            total_pending += record.remaining
+        
+        response = {
+            'success': True,
+            'voucher': {
+                'receipt_number': voucher.receipt_number,
+                'student_name': student.name,
+                'student_roll': student.roll_number,
+                'grade': student.grade,
+                'section': student.section,
+                'month': current_month,
+                'year': current_year,
+                'fee_amount': float(custom_fee if custom_fee > 0 else base_fee),
+                'charges': charges,
+                'total_pending': float(total_pending),
+                'generated_on': voucher.created_at.strftime('%Y-%m-%d'),
+                'due_date': fee_record.due_date.strftime('%Y-%m-%d') if fee_record else today.strftime('%Y-%m-%d'),
+                'can_edit': fee_record and fee_record.paid_amount == 0,
+            }
+        }
+        return JsonResponse(response)

@@ -161,6 +161,63 @@ class FeeRecord(models.Model):
     def __str__(self):
         return f"{self.student.name} - {self.month}/{self.year} - {self.get_status_display()}"
 
+# ------------------- Fee Voucher -------------------
+class FeeVoucher(models.Model):
+    STATUS_CHOICES = [
+        ('generated', 'Generated'),
+        ('paid_partial', 'Partially Paid'),
+        ('paid_full', 'Fully Paid'),
+    ]
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='vouchers')
+    fee_record = models.OneToOneField(FeeRecord, on_delete=models.CASCADE, related_name='voucher', blank=True, null=True)
+    month = models.PositiveSmallIntegerField()
+    year = models.PositiveSmallIntegerField()
+    base_fee = models.DecimalField(max_digits=10, decimal_places=2)
+    custom_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    extra_charges = models.JSONField(default=list, blank=True, null=True)
+    save_charges_for_future = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='generated')
+    receipt_number = models.CharField(max_length=50, unique=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['student', 'month', 'year']
+        ordering = ['-year', '-month']
+
+    @property
+    def total_amount(self):
+        """Total voucher amount = custom_fee + sum of extra charges"""
+        if self.custom_fee and self.custom_fee > 0:
+            fee = self.custom_fee
+        else:
+            fee = self.base_fee
+        charges_total = 0
+        if self.extra_charges:
+            charges_total = sum(ch.get('amount', 0) for ch in self.extra_charges)
+        return fee + charges_total
+
+    def save(self, *args, **kwargs):
+        if not self.receipt_number:
+            today = date.today()
+            prefix = f"VOCH-{today.strftime('%Y%m%d')}"
+            last = FeeVoucher.objects.filter(receipt_number__startswith=prefix).count()
+            self.receipt_number = f"{prefix}-{last+1:04d}"
+        
+        # Update status based on fee_record payment status
+        if self.fee_record:
+            if self.fee_record.is_fully_paid:
+                self.status = 'paid_full'
+            elif self.fee_record.paid_amount > 0:
+                self.status = 'paid_partial'
+            else:
+                self.status = 'generated'
+        
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Voucher-{self.student.name}-{self.month}/{self.year}"
+
 # ------------------- Payment Transaction -------------------
 class PaymentTransaction(models.Model):
     PAYMENT_MODE_CHOICES = [
