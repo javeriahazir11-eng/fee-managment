@@ -761,10 +761,11 @@
 <script>
   // Voucher button opens the shared voucher modal
   (function(){
+    // expose globals for voucher modal
+    window.schema = '{{ tenant.schema_name }}';
+    window.studentId = {{ student.id }};
     const voucherBtn = document.getElementById('genVoucherBtn');
-    const mobileSchema = '{{ tenant.schema_name }}';
-    const mobileStudentId = {{ student.id }};
-    if (voucherBtn) voucherBtn.addEventListener('click', () => { try { openVoucherModal(mobileStudentId, mobileSchema); } catch(e) { console.error(e); } });
+    if (voucherBtn) voucherBtn.addEventListener('click', () => { try { openVoucherModal(window.studentId, window.schema); } catch(e) { console.error(e); } });
   })();
 </script>
 {% endblock %}

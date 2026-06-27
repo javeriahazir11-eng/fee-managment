@@ -192,8 +192,10 @@ function getCookie(name) {
     return cookieValue;
 }
 const csrfToken = getCookie('csrftoken');
-const schema = '{{ tenant.schema_name }}';
-const studentId = {{ student.id }};
+window.schema = '{{ tenant.schema_name }}';
+window.studentId = {{ student.id }};
+const schema = window.schema;
+const studentId = window.studentId;
 console.log('[DEBUG] student_profile loaded. schema=' + schema + ', studentId=' + studentId);
 
 async function refreshData() {

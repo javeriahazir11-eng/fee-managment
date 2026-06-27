@@ -389,4 +389,22 @@ function downloadVoucherImage(element) {
         link.click();
     });
 }
+
+// Ensure voucher button works even if event handlers were attached earlier
+document.addEventListener('DOMContentLoaded', function() {
+    try {
+        const btn = document.getElementById('genVoucherBtn');
+        if (btn) btn.addEventListener('click', function() {
+            const sid = window.studentId || currentStudentId;
+            const sch = window.schema || currentSchema;
+            if (typeof openVoucherModal === 'function') {
+                openVoucherModal(sid, sch);
+            } else {
+                console.error('openVoucherModal not defined when clicking voucher button');
+            }
+        });
+    } catch (e) {
+        console.error('Error attaching voucher button listener', e);
+    }
+});
 </script>
