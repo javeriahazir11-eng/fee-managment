@@ -759,6 +759,10 @@
 
   })();
 </script>
+
+{# Include voucher modal UI and functions (must be before script that uses it) #}
+{% include 'tenant/voucher_modal.html' %}
+
 <script>
   // Voucher button opens the shared voucher modal
   (function(){
@@ -772,6 +776,3 @@
   })();
 </script>
 {% endblock %}
-
-{# Include voucher modal UI (mobile) #}
-{% include 'tenant/voucher_modal.html' %}

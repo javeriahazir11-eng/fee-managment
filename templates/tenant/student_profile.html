@@ -452,7 +452,12 @@ if (genBtn) {
 } else {
     console.error('[ERROR] Button with id "genFeeBtn" not found!');
 }
+</script>
 
+{# Include voucher modal UI and functions (must be before script that uses it) #}
+{% include 'tenant/voucher_modal.html' %}
+
+<script>
 // Voucher button handler (opens voucher modal defined in included template)
 const voucherBtn = document.getElementById('genVoucherBtn');
 if (voucherBtn) {
@@ -483,6 +488,3 @@ loadPayments();
 </script>
 
 {% endblock %}
-
-{# Include voucher modal UI (desktop) #}
-{% include 'tenant/voucher_modal.html' %}
