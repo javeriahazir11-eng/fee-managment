@@ -1450,6 +1450,7 @@ def student_voucher_status_api(request, schema_name, student_id):
             return JsonResponse({
                 'exists': True,
                 'can_edit': can_edit,
+                'fee_amount': float(record.amount),
                 'amount': float(record.amount),
                 'charges': record.extra_charges or [],
                 'total_pending': float(total_pending + float(record.remaining)),
@@ -1460,6 +1461,8 @@ def student_voucher_status_api(request, schema_name, student_id):
                 'month': month,
                 'year': year,
                 'due_date': record.due_date.isoformat(),
+                'generated_on': today.isoformat(),
+                'receipt_number': f"V-{record.id}",
                 'record_id': record.id
             })
         except FeeRecord.DoesNotExist:
@@ -1538,6 +1541,7 @@ def student_generate_voucher_api(request, schema_name, student_id):
                 'month': month,
                 'year': year,
                 'fee_amount': float(record.amount),
+                'amount': float(record.amount),
                 'charges': charges,
                 'total_pending': float(total_pending),
                 'due_date': record.due_date.isoformat(),
@@ -1595,6 +1599,7 @@ def student_update_voucher_api(request, schema_name, student_id):
                 'month': month,
                 'year': year,
                 'fee_amount': float(record.amount),
+                'amount': float(record.amount),
                 'charges': charges,
                 'total_pending': float(total_pending),
                 'due_date': record.due_date.isoformat(),
