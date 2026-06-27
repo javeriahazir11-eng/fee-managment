@@ -159,6 +159,37 @@ function openVoucherModal(studentId, schema) {
     loadVoucherStatus(studentId, schema);
 }
 
+// Expose a resilient global that works regardless of script load order
+try {
+    // keep a reference to the real implementation
+    window._realOpenVoucherModal = window._realOpenVoucherModal || openVoucherModal;
+} catch (e) {
+    // ignore
+}
+
+window.openVoucherModal = function(studentId, schema) {
+    if (typeof window._realOpenVoucherModal === 'function') {
+        try { return window._realOpenVoucherModal(studentId, schema); } catch (e) { console.error('openVoucherModal wrapper error', e); }
+    }
+    // Fallback: show modal element and set ids, then attempt to call real function when ready
+    try {
+        if (typeof studentId !== 'undefined') currentStudentId = studentId;
+        if (typeof schema !== 'undefined') currentSchema = schema;
+        if (voucherModal) voucherModal.style.display = 'flex';
+    } catch (e) { console.error('fallback openVoucherModal error', e); }
+    // Poll for real implementation for a short while
+    var attempts = 0;
+    var poll = setInterval(function() {
+        attempts += 1;
+        if (typeof window._realOpenVoucherModal === 'function') {
+            clearInterval(poll);
+            try { window._realOpenVoucherModal(studentId, schema); } catch (e) { console.error(e); }
+        } else if (attempts > 40) { // ~2 seconds
+            clearInterval(poll);
+        }
+    }, 50);
+};
+
 function loadVoucherStatus(studentId, schema) {
     fetch(`/portal/${schema}/api/student/${studentId}/voucher-status/`)
         .then(res => res.json())

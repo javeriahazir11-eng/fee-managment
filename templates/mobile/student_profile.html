@@ -529,6 +529,7 @@
     Fee Records
   </h2>
   <a href="{% url 'mobile_fee_collection' schema_name=tenant.schema_name student_id=student.id %}">+ New Charge</a>
+  <button id="genVoucherBtn2" class="link-btn" style="margin-left:8px;">Voucher</button>
 </div>
 <div class="history-list">
   {% if fee_records %}
@@ -766,6 +767,8 @@
     window.studentId = {{ student.id }};
     const voucherBtn = document.getElementById('genVoucherBtn');
     if (voucherBtn) voucherBtn.addEventListener('click', () => { try { openVoucherModal(window.studentId, window.schema); } catch(e) { console.error(e); } });
+    const voucherBtn2 = document.getElementById('genVoucherBtn2');
+    if (voucherBtn2) voucherBtn2.addEventListener('click', () => { try { openVoucherModal(window.studentId, window.schema); console.log('genVoucherBtn2 clicked'); } catch(e) { console.error(e); } });
   })();
 </script>
 {% endblock %}
