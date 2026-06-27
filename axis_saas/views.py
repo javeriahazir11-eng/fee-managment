@@ -1421,6 +1421,188 @@ def student_current_fee_status_api(request, schema_name, student_id):
             }
         return JsonResponse(data)
 
+
+@require_tenant_type(['school'])
+@require_http_methods(["GET"])
+def student_voucher_status_api(request, schema_name, student_id):
+    """API: Voucher status for current month for a student."""
+    from django.http import JsonResponse
+    from django_tenants.utils import schema_context
+    from .models import Student, FeeRecord, FeeStructure
+    from django.shortcuts import get_object_or_404
+    with schema_context(schema_name):
+        try:
+            student = Student.objects.get(id=student_id)
+        except Student.DoesNotExist:
+            return JsonResponse({'error': 'Student not found'}, status=404)
+        today = timezone.localdate()
+        month, year = today.month, today.year
+
+        # compute total pending excluding current month
+        total_pending = 0
+        for fr in student.fee_records.all():
+            if not (fr.month == month and fr.year == year):
+                total_pending += float(fr.remaining)
+
+        try:
+            record = FeeRecord.objects.get(student=student, month=month, year=year)
+            can_edit = (float(record.paid_amount) == 0)
+            return JsonResponse({
+                'exists': True,
+                'can_edit': can_edit,
+                'amount': float(record.amount),
+                'charges': record.extra_charges or [],
+                'total_pending': float(total_pending + float(record.remaining)),
+                'student_name': student.name,
+                'student_roll': student.roll_number,
+                'grade': student.grade,
+                'section': student.section,
+                'month': month,
+                'year': year,
+                'due_date': record.due_date.isoformat(),
+                'record_id': record.id
+            })
+        except FeeRecord.DoesNotExist:
+            default_fee = float(student.custom_fee) if student.custom_fee > 0 else 0
+            if default_fee == 0:
+                fs = FeeStructure.objects.filter(grade=student.grade).first()
+                if fs:
+                    default_fee = float(fs.monthly_fee)
+
+            return JsonResponse({
+                'exists': False,
+                'default_fee': default_fee,
+                'default_charges': student.default_extra_charges or [],
+                'total_pending': float(total_pending),
+                'student_name': student.name,
+                'student_roll': student.roll_number,
+                'grade': student.grade,
+                'section': student.section,
+                'month': month,
+                'year': year,
+            })
+
+
+@require_tenant_type(['school'])
+@require_http_methods(["POST"])
+def student_generate_voucher_api(request, schema_name, student_id):
+    from django.http import JsonResponse
+    from django_tenants.utils import schema_context
+    from .models import Student, FeeRecord, SchoolFeeSettings, FeeStructure
+    from django.shortcuts import get_object_or_404
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    custom_amount = data.get('custom_amount')
+    charges = data.get('charges', [])
+    save_default = data.get('save_default_charges', False)
+
+    with schema_context(schema_name):
+        student = get_object_or_404(Student, id=student_id)
+        today = timezone.localdate()
+        month, year = today.month, today.year
+
+        if save_default:
+            student.default_extra_charges = charges
+            student.save(update_fields=['default_extra_charges'])
+
+        if custom_amount not in [None, '']:
+            amount = Decimal(str(custom_amount))
+        else:
+            amount = student.custom_fee if student.custom_fee > 0 else 0
+            if amount == 0:
+                fs = FeeStructure.objects.filter(grade=student.grade).first()
+                if fs: amount = fs.monthly_fee
+
+        settings, _ = SchoolFeeSettings.objects.get_or_create(pk=1)
+        due_date = today + timedelta(days=settings.due_date_offset)
+
+        record, created = FeeRecord.objects.update_or_create(
+            student=student, month=month, year=year,
+            defaults={'amount': amount, 'due_date': due_date, 'status': 'pending', 'extra_charges': charges}
+        )
+
+        total_pending = sum(float(fr.remaining) for fr in student.fee_records.all() if not (fr.month == month and fr.year == year))
+        total_pending += float(record.remaining)
+
+        return JsonResponse({
+            'success': True,
+            'voucher': {
+                'receipt_number': f"V-{record.id}",
+                'student_name': student.name,
+                'student_roll': student.roll_number,
+                'grade': student.grade,
+                'section': student.section,
+                'month': month,
+                'year': year,
+                'fee_amount': float(record.amount),
+                'charges': charges,
+                'total_pending': float(total_pending),
+                'due_date': record.due_date.isoformat(),
+                'generated_on': today.isoformat(),
+                'can_edit': True
+            }
+        })
+
+
+@require_tenant_type(['school'])
+@require_http_methods(["POST"])
+def student_update_voucher_api(request, schema_name, student_id):
+    from django.http import JsonResponse
+    from django_tenants.utils import schema_context
+    from .models import Student, FeeRecord, SchoolFeeSettings
+    from django.shortcuts import get_object_or_404
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    custom_amount = data.get('custom_amount')
+    charges = data.get('charges', [])
+    save_default = data.get('save_default_charges', False)
+
+    with schema_context(schema_name):
+        student = get_object_or_404(Student, id=student_id)
+        today = timezone.localdate()
+        month, year = today.month, today.year
+
+        if save_default:
+            student.default_extra_charges = charges
+            student.save(update_fields=['default_extra_charges'])
+
+        record = get_object_or_404(FeeRecord, student=student, month=month, year=year)
+        if float(record.paid_amount) > 0:
+            return JsonResponse({'error': 'Cannot edit a paid voucher'}, status=400)
+
+        if custom_amount not in [None, '']:
+            record.amount = Decimal(str(custom_amount))
+        record.extra_charges = charges
+        record.save()
+
+        total_pending = sum(float(fr.remaining) for fr in student.fee_records.all() if not (fr.month == month and fr.year == year))
+        total_pending += float(record.remaining)
+
+        return JsonResponse({
+            'success': True,
+            'voucher': {
+                'receipt_number': f"V-{record.id}",
+                'student_name': student.name,
+                'student_roll': student.roll_number,
+                'grade': student.grade,
+                'section': student.section,
+                'month': month,
+                'year': year,
+                'fee_amount': float(record.amount),
+                'charges': charges,
+                'total_pending': float(total_pending),
+                'due_date': record.due_date.isoformat(),
+                'generated_on': today.isoformat(),
+                'can_edit': True
+            }
+        })
+
 def gym_generate_subscription(request, schema_name, customer_id):
     """Generate a new subscription for a gym customer (multi-month)."""
     from django.http import JsonResponse

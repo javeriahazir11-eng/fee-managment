@@ -85,6 +85,7 @@ class Student(models.Model):
     roll_number = models.CharField(max_length=50, unique=True, blank=True)
     custom_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     enrolled_on = models.DateTimeField(auto_now_add=True)
+    default_extra_charges = models.JSONField(default=list, blank=True, null=True)
 
     def save(self, *args, **kwargs):
         if not self.roll_number:
@@ -132,6 +133,7 @@ class FeeRecord(models.Model):
     due_date = models.DateField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     remarks = models.TextField(blank=True, null=True)
+    extra_charges = models.JSONField(default=list, blank=True, null=True)
 
     class Meta:
         unique_together = ['student', 'month', 'year']

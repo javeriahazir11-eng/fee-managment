@@ -447,6 +447,10 @@
       </svg>
       Edit
     </button>
+    <button class="btn-primary" id="genVoucherBtn" style="background:#10b981;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m-7 4h10a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+      Voucher
+    </button>
   </div>
 </div>
 
@@ -754,4 +758,16 @@
 
   })();
 </script>
+<script>
+  // Voucher button opens the shared voucher modal
+  (function(){
+    const voucherBtn = document.getElementById('genVoucherBtn');
+    const mobileSchema = '{{ tenant.schema_name }}';
+    const mobileStudentId = {{ student.id }};
+    if (voucherBtn) voucherBtn.addEventListener('click', () => { try { openVoucherModal(mobileStudentId, mobileSchema); } catch(e) { console.error(e); } });
+  })();
+</script>
 {% endblock %}
+
+{# Include voucher modal UI (mobile) #}
+{% include 'tenant/voucher_modal.html' %}
